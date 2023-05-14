@@ -827,6 +827,10 @@ namespace {
 
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
+            bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
+            if (needComputationBeforeNM && !needComputationAfterNM)
+                pos.copyAccFrom(childState);
+
             // Do verification search at high depths, with null move pruning disabled
             // until ply exceeds nmpMinPly.
             thisThread->nmpMinPly = ss->ply + 3 * (depth-R) / 4;
@@ -839,9 +843,12 @@ namespace {
                 return nullValue;
         }
 
-        bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
-        if (needComputationBeforeNM && !needComputationAfterNM)
-            pos.copyAccFrom(childState);
+        else
+        {
+            bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
+            if (needComputationBeforeNM && !needComputationAfterNM)
+                pos.copyAccFrom(childState);
+        }
     }
 
     probCutBeta = beta + 186 - 54 * improving;
