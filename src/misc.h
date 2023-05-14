@@ -33,8 +33,27 @@
 
 namespace Stockfish {
 
+class Position; //Needed by is_game_decided
+
 std::string engine_info(bool to_uci = false);
 std::string compiler_info();
+
+void show_logo();
+std::string format_bytes(uint64_t bytes, int decimals);
+
+namespace SysInfo
+{
+    void init();
+    const std::string os_info();
+    const std::string processor_brand();
+    const std::string numa_nodes();
+    const std::string physical_cores();
+    const std::string logical_cores();
+    const std::string is_hyper_threading();
+    const std::string cache_info(int idx);
+    const std::string total_memory();
+}
+
 void prefetch(void* addr);
 void start_logger(const std::string& fname);
 void* std_aligned_alloc(size_t alignment, size_t size);
@@ -70,6 +89,18 @@ std::ostream& operator<<(std::ostream&, SyncCout);
 #define sync_cout std::cout << IO_LOCK
 #define sync_endl std::endl << IO_UNLOCK
 
+namespace Utility {
+
+    extern std::string myFolder;
+
+    void init(const char* arg0);
+
+    std::string unquote(const std::string& s);
+    
+    std::string map_path(const std::string& path);
+    bool file_exists(const std::string& filename);
+    bool is_game_decided(const Position& pos, Value lastScore);
+}
 
 // align_ptr_up() : get the first aligned element of an array.
 // ptr must point to an array of size at least `sizeof(T) * N + alignment` bytes,

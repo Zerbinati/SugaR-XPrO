@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-	EXE = spacefish.exe
+	EXE = sugar.exe
 else
-	EXE = spacefish
+	EXE = sugar
 endif
 
 ### Installation dir definitions
@@ -56,7 +56,7 @@ else
 endif
 
 ### Source and object files
-SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp experience.cpp main.cpp \
 	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp polybook.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
@@ -762,7 +762,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile spacefish, type: "
+	@echo "To compile sugar, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -908,17 +908,17 @@ net:
 
 # clean binaries and objects
 objclean:
-	@rm -f spacefish spacefish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f sugar sugar.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s
-	@rm -f spacefish.profdata *.profraw
-	@rm -f spacefish.profdata *.profraw
-	@rm -f spacefish.*args*
-	@rm -f spacefish.*lt*
-	@rm -f spacefish.res
+	@rm -f sugar.profdata *.profraw
+	@rm -f sugar.profdata *.profraw
+	@rm -f sugar.*args*
+	@rm -f sugar.*lt*
+	@rm -f sugar.res
 	@rm -f ./-lstdc++.res
 
 default:
@@ -1002,9 +1002,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=spacefish.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=sugar.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=spacefish.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=sugar.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 

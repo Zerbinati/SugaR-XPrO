@@ -43,6 +43,8 @@ namespace Eval {
 
   namespace NNUE {
 
+    extern int MaterialisticEvaluationStrategy;
+    extern int PositionalEvaluationStrategy;
     void init();
     void verify();
 
