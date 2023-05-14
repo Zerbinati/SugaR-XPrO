@@ -20,6 +20,7 @@
 
 #include "bitboard.h"
 #include "endgame.h"
+#include "polybook.h"
 #include "position.h"
 #include "psqt.h"
 #include "search.h"
@@ -43,6 +44,8 @@ int main(int argc, char* argv[]) {
   Bitbases::init();
   Endgames::init();
   Threads.set(size_t(Options["Threads"]));
+  polybook[0].init(Options["Book1 File"]);
+  polybook[1].init(Options["Book2 File"]);
   Search::clear(); // After threads are up
   Eval::NNUE::init();
 

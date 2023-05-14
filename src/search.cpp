@@ -23,6 +23,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "polybook.h"
 #include "evaluate.h"
 #include "misc.h"
 #include "movegen.h"
@@ -197,6 +198,8 @@ void MainThread::search() {
 
   Eval::NNUE::verify();
 
+  Move bookMove = MOVE_NONE;
+  
   if (rootMoves.empty())
   {
       rootMoves.emplace_back(MOVE_NONE);
@@ -206,8 +209,26 @@ void MainThread::search() {
   }
   else
   {
-      Threads.start_searching(); // start non-main threads
-      Thread::search();          // main thread start searching
+      if (!Limits.infinite && !Limits.mate)
+      {
+          //Check polyglot books first
+          if ((bool)Options["Book1"] && rootPos.game_ply() / 2 < (int)Options["Book1 Depth"])
+              bookMove = polybook[0].probe(rootPos, (bool)Options["Book1 BestBookMove"]);
+
+          if(bookMove == MOVE_NONE && (bool)Options["Book2"] && rootPos.game_ply() / 2 < (int)Options["Book2 Depth"])
+              bookMove = polybook[1].probe(rootPos, (bool)Options["Book1 BestBookMove"]);
+      }
+
+      if (bookMove != MOVE_NONE && std::find(rootMoves.begin(), rootMoves.end(), bookMove) != rootMoves.end())
+      {
+          for (Thread* th : Threads)
+              std::swap(th->rootMoves[0], *std::find(th->rootMoves.begin(), th->rootMoves.end(), bookMove));
+      }
+      else
+      {
+          Threads.start_searching(); // start non-main threads
+          Thread::search();          // main thread start searching
+      }
   }
 
   // When we reach the maximum depth, we can arrive here without a raise of
@@ -347,25 +368,24 @@ void Thread::search() {
           selDepth = 0;
 
           // Reset aspiration window starting size
-          Value prev = rootMoves[pvIdx].averageScore;
-          delta = Value(10) + int(prev) * prev / 16502;
-          alpha = std::max(prev - delta,-VALUE_INFINITE);
-          beta  = std::min(prev + delta, VALUE_INFINITE);
+              int bonus = int(prev) * prev / 16502;
+              delta = Value(10);
+              alpha = std::max(prev - (delta + (prev < 0 ? bonus : 0)), -VALUE_INFINITE);
 
           // Adjust optimism based on root move's previousScore
-          int opt = 102 * prev / (std::abs(prev) + 147);
+		  int contempt = prev > 0 ? (int)Options["Contempt Value"] : 0;
+          int opt = 120 * (prev + contempt) / (std::abs(prev + contempt) + 161);
+		  
           optimism[ us] = Value(opt);
           optimism[~us] = -optimism[us];
-
           // Start with a small aspiration window and, in the case of a fail
           // high/low, re-search with a bigger window until we don't fail
           // high/low anymore.
-          int failedHighCnt = 0;
           while (true)
           {
               // Adjust the effective depth searched, but ensuring at least one effective increment for every
               // four searchAgain steps (see issue #2717).
-              Depth adjustedDepth = std::max(1, rootDepth - failedHighCnt - 3 * (searchAgainCounter + 1) / 4);
+              Depth adjustedDepth = std::max(1, rootDepth - 3 * (searchAgainCounter + 1) / 4);
               bestValue = Stockfish::search<Root>(rootPos, ss, alpha, beta, adjustedDepth, false);
 
               // Bring the best move to the front. It is critical that sorting
@@ -394,17 +414,10 @@ void Thread::search() {
               // re-search, otherwise exit the loop.
               if (bestValue <= alpha)
               {
-                  beta = (alpha + beta) / 2;
                   alpha = std::max(bestValue - delta, -VALUE_INFINITE);
 
-                  failedHighCnt = 0;
                   if (mainThread)
                       mainThread->stopOnPonderhit = false;
-              }
-              else if (bestValue >= beta)
-              {
-                  beta = std::min(bestValue + delta, VALUE_INFINITE);
-                  ++failedHighCnt;
               }
               else
                   break;
@@ -799,6 +812,8 @@ namespace {
 
         pos.undo_null_move();
 
+        Eval::NNUE::hint_common_parent_position(pos);
+
         if (nullValue >= beta)
         {
             // Do not return unproven mate or TB scores
@@ -1135,6 +1150,12 @@ moves_loop: // When in check, search starts here
 
       // Step 16. Make the move
       pos.do_move(move, st, givesCheck);
+
+      // Hint this node for updating
+      if (  !capture
+          && type_of(movedPiece) != KING
+          && depth > (PvNode ? 3 : 5))
+          Eval::NNUE::hint_common_parent_position(pos);
 
       // Decrease reduction if position is or has been on the PV
       // and node is not likely to fail low. (~3 Elo)

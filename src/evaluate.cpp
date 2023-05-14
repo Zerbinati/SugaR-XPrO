@@ -61,6 +61,7 @@ namespace Stockfish {
 namespace Eval {
 
   bool useNNUE;
+  int contempt;
   string currentEvalFileName = "None";
 
   /// NNUE::init() tries to load a NNUE network at startup time, or when the engine
@@ -94,6 +95,7 @@ namespace Eval {
             {
                 ifstream stream(directory + eval_file, ios::binary);
                 if (NNUE::load_eval(eval_file, stream))
+				sync_cout << "info string Evaluation network loaded successfully ..." << sync_endl;
                     currentEvalFileName = eval_file;
             }
 
@@ -1036,6 +1038,7 @@ make_v:
 
     // Side to move point of view
     v = (pos.side_to_move() == WHITE ? v : -v);
+	Eval::contempt = kingAttackersCount[pos.side_to_move()] > 3 ? 20 : 0;
 
     return v;
   }
@@ -1066,7 +1069,7 @@ Value Eval::evaluate(const Position& pos) {
       int scale = 967 + pos.non_pawn_material() / 64;
 
       Color stm = pos.side_to_move();
-      Value optimism = pos.this_thread()->optimism[stm];
+      Value optimism = pos.this_thread()->optimism[stm] + Eval::contempt;
 
       Value nnue = NNUE::evaluate(pos, true, &nnueComplexity);
 

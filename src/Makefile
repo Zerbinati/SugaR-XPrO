@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-	EXE = stockfish.exe
+	EXE = spacefish.exe
 else
-	EXE = stockfish
+	EXE = spacefish
 endif
 
 ### Installation dir definitions
@@ -57,7 +57,7 @@ endif
 
 ### Source and object files
 SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp polybook.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
 
@@ -367,7 +367,7 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
-CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 -DNNUE_EMBEDDING_OFF $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
@@ -762,7 +762,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile stockfish, type: "
+	@echo "To compile spacefish, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -849,7 +849,7 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH) 2>&1 | tail -n 4
+	$(PGOBENCH) 2>&1
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
@@ -908,16 +908,17 @@ net:
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f spacefish spacefish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s
-	@rm -f stockfish.profdata *.profraw
-	@rm -f stockfish.*args*
-	@rm -f stockfish.*lt*
-	@rm -f stockfish.res
+	@rm -f spacefish.profdata *.profraw
+	@rm -f spacefish.profdata *.profraw
+	@rm -f spacefish.*args*
+	@rm -f spacefish.*lt*
+	@rm -f spacefish.res
 	@rm -f ./-lstdc++.res
 
 default:
@@ -1001,9 +1002,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=spacefish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=spacefish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 

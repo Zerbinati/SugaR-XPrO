@@ -28,6 +28,7 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "polybook.h"
 
 using std::string;
 
@@ -43,6 +44,9 @@ static void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 static void on_logger(const Option& o) { start_logger(o); }
 static void on_threads(const Option& o) { Threads.set(size_t(o)); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
+static void on_book1_file(const Option& o) { polybook[0].init(o); }
+static void on_book2_file(const Option& o) { polybook[1].init(o); }
+static void on_contempt_c1(const Option&) { Search::init(); }
 static void on_use_NNUE(const Option&) { Eval::NNUE::init(); }
 static void on_eval_file(const Option&) { Eval::NNUE::init(); }
 
@@ -64,14 +68,15 @@ void init(OptionsMap& o) {
   o["Threads"]               << Option(1, 1, 1024, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
   o["Clear Hash"]            << Option(on_clear_hash);
+  o["Contempt Value"]        << Option(25, 0, 100, on_contempt_c1);
   o["Ponder"]                << Option(false);
   o["MultiPV"]               << Option(1, 1, 500);
   o["Skill Level"]           << Option(20, 0, 20);
   o["Move Overhead"]         << Option(10, 0, 5000);
+  o["Minimum Thinking Time"]               << Option(100, 0, 5000);
   o["Slow Mover"]            << Option(100, 10, 1000);
   o["nodestime"]             << Option(0, 0, 10000);
   o["UCI_Chess960"]          << Option(false);
-  o["UCI_AnalyseMode"]       << Option(false);
   o["UCI_LimitStrength"]     << Option(false);
   o["UCI_Elo"]               << Option(1320, 1320, 3190);
   o["UCI_ShowWDL"]           << Option(false);
@@ -79,6 +84,14 @@ void init(OptionsMap& o) {
   o["SyzygyProbeDepth"]      << Option(1, 1, 100);
   o["Syzygy50MoveRule"]      << Option(true);
   o["SyzygyProbeLimit"]      << Option(7, 0, 7);
+  o["Book1"]                               << Option(false);
+  o["Book1 File"]                          << Option("<empty>", on_book1_file);
+  o["Book1 BestBookMove"]                  << Option(true);
+  o["Book1 Depth"]                         << Option(100, 1, 350);
+  o["Book2"]                               << Option(false);
+  o["Book2 File"]                          << Option("<empty>", on_book2_file);
+  o["Book2 BestBookMove"]                  << Option(true);
+  o["Book2 Depth"]                         << Option(100, 1, 350);
   o["Use NNUE"]              << Option(true, on_use_NNUE);
   o["EvalFile"]              << Option(EvalFileDefaultName, on_eval_file);
 }

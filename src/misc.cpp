@@ -72,8 +72,9 @@ namespace Stockfish {
 
 namespace {
 
-/// Version number or dev.
-constexpr string_view version = "dev";
+/// Version number. If Version is left empty, then compile date in the format
+/// DD-MM-YY and show in engine_info.
+const string Version = "";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -142,45 +143,33 @@ public:
 } // namespace
 
 
-/// engine_info() returns the full name of the current Stockfish version.
-/// For local dev compiles we try to append the commit sha and commit date
-/// from git if that fails only the local compilation date is set and "nogit" is specified:
-/// Stockfish dev-YYYYMMDD-SHA
-/// or
-/// Stockfish dev-YYYYMMDD-nogit
-///
-/// For releases (non dev builds) we only include the version number:
-/// Stockfish version
+/// engine_info() returns the full name of the current Spacefish version. This
+/// will be either "Spacefish <Tag> DD-MM-YY" (where DD-MM-YY is the date when
+/// the program was compiled) or "Spacefish <Version>", depending on whether
+/// Version is empty.
+   
 
 string engine_info(bool to_uci) {
-  stringstream ss;
-  ss << "Stockfish " << version << setfill('0');
 
-  if constexpr (version == "dev")
+  const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+  string month, day, year;
+  stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
+
+  ss << "Spacefish " << Version << setfill('0');
+
+  if (Version.empty())
   {
-      ss << "-";
-      #ifdef GIT_DATE
-      ss << stringify(GIT_DATE);
-      #else
-      constexpr string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
-      string month, day, year;
-      stringstream date(__DATE__); // From compiler, format is "Sep 21 2008"
-
       date >> month >> day >> year;
-      ss << year << setw(2) << setfill('0') << (1 + months.find(month) / 4) << setw(2) << setfill('0') << day;
-      #endif
-
-      ss << "-";
-
-      #ifdef GIT_SHA
-      ss << stringify(GIT_SHA);
-      #else
-      ss << "nogit";
-      #endif
+      ss << setw(2) << day << setw(2) << (1 + months.find(month) / 4) << year.substr(2);
   }
 
   ss << (to_uci  ? "\nid author ": " by ")
-     << "the Stockfish developers (see AUTHORS file)";
+     << "M.Z, Stockfish developers (see AUTHORS file)";
+
+      ss << "\n"
+         << compiler_info()
+         << "\nBuild date/time       : " << year << '-' << setw(2) << setfill('0') << month << '-' << setw(2) << setfill('0') << day << ' ' << __TIME__
+         << "\n";
 
   return ss.str();
 }
