@@ -819,6 +819,7 @@ namespace {
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
 
         pos.do_null_move(st);
+		StateInfo* childState = pos.state();
 
         ss->kingContinuationHistory = &thisThread->continuationHistory[0][0][make_piece(us, KING)][pos.square<KING>(us)];
 
@@ -1178,8 +1179,7 @@ moves_loop: // When in check, search starts here
       // Step 16. Make the move
       pos.do_move(move, st, givesCheck);
 
-      ss->kingContinuationHistory[WHITE] = &thisThread->continuationHistory[ss->inCheck][capture][W_KING][pos.square<KING>(WHITE)];
-      ss->kingContinuationHistory[BLACK] = &thisThread->continuationHistory[ss->inCheck][capture][B_KING][pos.square<KING>(BLACK)];
+      ss->kingContinuationHistory = &thisThread->continuationHistory[ss->inCheck][capture][make_piece(us, KING)][pos.square<KING>(us)];
 
       // Hint this node for updating
       if (  !capture
