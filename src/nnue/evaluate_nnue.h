@@ -57,7 +57,7 @@ namespace Stockfish::Eval::NNUE {
 
   std::string trace(Position& pos);
   Value evaluate(const Position& pos, bool adjusted = false, int* complexity = nullptr);
-  void hint_common_parent_position(const Position& pos);
+  bool hint_common_parent_position(const Position& pos, bool checkOnly = false);
 
   bool load_eval(std::string name, std::istream& stream);
   bool save_eval(std::ostream& stream);
