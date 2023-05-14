@@ -48,6 +48,8 @@ static void on_tb_path(const Option& o) { Tablebases::init(o); }
 static void on_book1_file(const Option& o) { polybook[0].init(o); }
 static void on_book2_file(const Option& o) { polybook[1].init(o); }
 static void on_contempt_c1(const Option&) { Search::init(); }
+static void on_predicted_S(const Option&) { Search::init(); }
+static void on_predicted_F(const Option&) { Search::init(); }
 static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
 static void on_exp_file(const Option& /*o*/) { Experience::init(); }
 static void on_use_NNUE(const Option&) { Eval::NNUE::init(); }
@@ -109,6 +111,8 @@ void init(OptionsMap& o) {
   o["EvalFile"]                            << Option(EvalFileDefaultName, on_eval_file);
   o["Materialistic Evaluation Strategy"]   << Option(-0, -96, 96, on_materialistic_evaluation_strategy);
   o["Positional Evaluation Strategy"]      << Option(0, -96, 96, on_positional_evaluation_strategy);
+  o["Predicted Move Successful"]           << Option(900, 0, 1500, on_predicted_S);
+  o["Predicted Move Failed"]               << Option(1100, 0, 1500, on_predicted_F);
 }
 
 
