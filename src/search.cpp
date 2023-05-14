@@ -300,9 +300,9 @@ void Thread::search() {
   std::memset(ss-7, 0, 10 * sizeof(Stack));
   for (int i = 7; i > 0; --i)
   {
+      Color c = Color(us ^ (i & 1));
       (ss-i)->continuationHistory = &this->continuationHistory[0][0][NO_PIECE][0]; // Use as a sentinel
-      (ss-i)->kingContinuationHistory[WHITE] = &this->continuationHistory[0][0][W_KING][rootPos.square<KING>(WHITE)]; // Use as a sentinel
-      (ss-i)->kingContinuationHistory[BLACK] = &this->continuationHistory[0][0][B_KING][rootPos.square<KING>(BLACK)]; // Use as a sentinel
+      (ss-i)->kingContinuationHistory = &this->continuationHistory[0][0][make_piece(c, KING)][rootPos.square<KING>(c)]; // Use as a sentinel
       (ss-i)->staticEval = VALUE_NONE;
   }
 
@@ -820,8 +820,7 @@ namespace {
 
         pos.do_null_move(st);
 
-        ss->kingContinuationHistory[WHITE] = &thisThread->continuationHistory[0][0][W_KING][pos.square<KING>(WHITE)];
-        ss->kingContinuationHistory[BLACK] = &thisThread->continuationHistory[0][0][B_KING][pos.square<KING>(BLACK)];
+        ss->kingContinuationHistory = &thisThread->continuationHistory[0][0][make_piece(us, KING)][pos.square<KING>(us)];
 
         Value nullValue = -search<NonPV>(pos, ss+1, -beta, -beta+1, depth-R, !cutNode);
 
@@ -898,8 +897,7 @@ namespace {
 
                 pos.do_move(move, st);
 
-                ss->kingContinuationHistory[WHITE] = &thisThread->continuationHistory[ss->inCheck][true][W_KING][pos.square<KING>(WHITE)];
-                ss->kingContinuationHistory[BLACK] = &thisThread->continuationHistory[ss->inCheck][true][B_KING][pos.square<KING>(BLACK)];
+                ss->kingContinuationHistory = &thisThread->continuationHistory[ss->inCheck][true][make_piece(us, KING)][pos.square<KING>(us)];
 
                 // Perform a preliminary qsearch to verify that the move holds
                 value = -qsearch<NonPV>(pos, ss+1, -probCutBeta, -probCutBeta+1);
@@ -950,9 +948,9 @@ moves_loop: // When in check, search starts here
         && abs(beta) <= VALUE_KNOWN_WIN)
         return probCutBeta;
 
-    const PieceToHistory* contHist[] = { (ss-1)->continuationHistory         , (ss-2)->continuationHistory,
-                                         (ss-1)->kingContinuationHistory[ us], (ss-4)->continuationHistory,
-                                         (ss-1)->kingContinuationHistory[~us], (ss-6)->continuationHistory };
+    const PieceToHistory* contHist[] = { (ss-1)->continuationHistory    , (ss-2)->continuationHistory,
+                                         (ss-1)->kingContinuationHistory, (ss-4)->continuationHistory,
+                                         nullptr                        , (ss-6)->continuationHistory };
 
     Move countermove = prevSq != SQ_NONE ? thisThread->counterMoves[pos.piece_on(prevSq)][prevSq] : MOVE_NONE;
 
