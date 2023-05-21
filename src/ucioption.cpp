@@ -45,8 +45,6 @@ static void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 static void on_logger(const Option& o) { start_logger(o); }
 static void on_threads(const Option& o) { Threads.set(size_t(o)); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
-static void on_book1_file(const Option& o) { polybook[0].init(o); }
-static void on_book2_file(const Option& o) { polybook[1].init(o); }
 static void on_contempt_c1(const Option&) { Search::init(); }
 static void on_predicted_S(const Option&) { Search::init(); }
 static void on_predicted_F(const Option&) { Search::init(); }
@@ -91,14 +89,6 @@ void init(OptionsMap& o) {
   o["SyzygyProbeDepth"]                    << Option(1, 1, 100);
   o["Syzygy50MoveRule"]                    << Option(true);
   o["SyzygyProbeLimit"]                    << Option(7, 0, 7);
-  o["Book1"]                               << Option(false);
-  o["Book1 File"]                          << Option("<empty>", on_book1_file);
-  o["Book1 BestBookMove"]                  << Option(true);
-  o["Book1 Depth"]                         << Option(100, 1, 350);
-  o["Book2"]                               << Option(false);
-  o["Book2 File"]                          << Option("<empty>", on_book2_file);
-  o["Book2 BestBookMove"]                  << Option(true);
-  o["Book2 Depth"]                         << Option(100, 1, 350);
   o["Experience Enabled"]                  << Option(true, on_exp_enabled);
   o["Experience File"]                     << Option("SugaR.exp", on_exp_file);
   o["Experience Readonly"]                 << Option(false);
