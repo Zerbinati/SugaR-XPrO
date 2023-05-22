@@ -32,6 +32,7 @@
 #include "timeman.h"
 #include "tt.h"
 #include "uci.h"
+#include "book/book.h"
 #include "syzygy/tbprobe.h"
 #include "nnue/evaluate_nnue.h"
 
@@ -293,6 +294,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "bench")    bench(pos, is, states);
       else if (token == "d")        sync_cout << pos << sync_endl;
       else if (token == "eval")     trace_eval(pos);
+      else if (token == "book")    Book::show_moves(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
       else if (argc > 2 && token == "defrag")   Experience::defrag(argc - 2, argv + 2);
       else if (argc > 2 && token == "merge")    Experience::merge(argc - 2, argv + 2);
@@ -308,13 +310,18 @@ void UCI::loop(int argc, char* argv[]) {
           Eval::NNUE::save_eval(filename);
       }
       else if (token == "--help" || token == "help" || token == "--license" || token == "license")
+          sync_cout << "\nSugar is a powerful chess engine for playing and analyzing."
+                       "\nIt is released as free software licensed under the GNU GPLv3 License."
+                       "\nSugar is normally used with a graphical user interface (GUI) and implements"
+                       "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
+                       "\nFor any further information, visit https://github.com/Zerbinati/HypnoS-NN#readme" << sync_endl;
           sync_cout << "\nStockfish is a powerful chess engine for playing and analyzing."
                        "\nIt is released as free software licensed under the GNU GPLv3 License."
                        "\nStockfish is normally used with a graphical user interface (GUI) and implements"
                        "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
                        "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
                        "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n" << sync_endl;
-      else if (!token.empty() && token[0] != '#')
+      if (!token.empty() && token[0] != '#')
           sync_cout << "Unknown command: '" << cmd << "'. Type help for more information." << sync_endl;
 
   } while (token != "quit" && argc == 1); // The command-line arguments are one-shot

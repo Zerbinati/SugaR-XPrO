@@ -52,18 +52,19 @@ BINDIR = $(PREFIX)/bin
 ifeq ($(SDE_PATH),)
 	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 else
-	PGOBENCH = $(SDE_PATH) -- $(WINE_PATH) ./$(EXE) bench
+	PGOBENCH = $(SDE_PATH) -future -- $(WINE_PATH) ./$(EXE) bench
 endif
 
 ### Source and object files
 SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp experience.cpp main.cpp \
 	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
+	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp \
+	book/book.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features
+VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -908,13 +909,12 @@ net:
 
 # clean binaries and objects
 objclean:
-	@rm -f sugar sugar.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f sugar sugar.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s
-	@rm -f sugar.profdata *.profraw
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda *.s 
 	@rm -f sugar.profdata *.profraw
 	@rm -f sugar.*args*
 	@rm -f sugar.*lt*

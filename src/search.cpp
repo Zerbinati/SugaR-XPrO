@@ -22,7 +22,6 @@
 #include <cstring>   // For std::memset
 #include <iostream>
 #include <sstream>
-				  
 
 #include "evaluate.h"
 #include "experience.h"
@@ -35,6 +34,7 @@
 #include "timeman.h"
 #include "tt.h"
 #include "uci.h"
+#include "book/book.h"
 #include "syzygy/tbprobe.h"
 #include "nnue/evaluate_nnue.h"
 
@@ -43,12 +43,6 @@ namespace Stockfish {
 namespace Search {
 
   LimitsType Limits;
-		   
-					
-							
-			   
-						   
-				 
 }
 
 namespace Tablebases {
@@ -178,16 +172,12 @@ void Search::init() {
 
 void Search::clear() {
 
-								
-		
-
   Threads.main()->wait_for_search_finished();
 
   Time.availableNodes = 0;
   TT.clear();
   Threads.clear();
   Tablebases::init(Options["SyzygyPath"]); // Free mapped files
- 
 
   Experience::save();
   Experience::resume_learning();
@@ -210,14 +200,11 @@ void MainThread::search() {
 
   Color us = rootPos.side_to_move();
   Time.init(Limits, us, rootPos.game_ply());
-					   
   TT.new_search();
-	  
-						 
 
   Eval::NNUE::verify();
 
-  Move bookMove = MOVE_NONE;
+  bool think = true;
 
   if (rootMoves.empty())
   {
@@ -228,7 +215,12 @@ void MainThread::search() {
   }
   else
   {
-          //Check experience book second
+      if (!(Limits.infinite || Limits.mate || Limits.depth || Limits.nodes || Limits.perft) && !ponder)
+      {
+          //Probe the configured books
+          Move bookMove = Book::probe(rootPos);
+
+          //Check experience book
           if (bookMove == MOVE_NONE && (bool)Options["Experience Book"] && rootPos.game_ply() / 2 < (int)Options["Experience Book Max Moves"] && Experience::enabled())
           {
               Depth expBookMinDepth = (Depth)Options["Experience Book Min Depth"];
@@ -306,14 +298,17 @@ void MainThread::search() {
                   }
               }
           }
+
+          if (bookMove != MOVE_NONE && std::find(rootMoves.begin(), rootMoves.end(), bookMove) != rootMoves.end())
+          {
+              think = false;
+
+              for (Thread* th : Threads)
+                  std::swap(th->rootMoves[0], *std::find(th->rootMoves.begin(), th->rootMoves.end(), bookMove));
+          }
       }
 
-      if (bookMove != MOVE_NONE && std::find(rootMoves.begin(), rootMoves.end(), bookMove) != rootMoves.end())
-      {
-          for (Thread* th : Threads)
-              std::swap(th->rootMoves[0], *std::find(th->rootMoves.begin(), th->rootMoves.end(), bookMove));
-      }
-      else
+      if (think)
       {
           Threads.start_searching(); // start non-main threads
           Thread::search();          // main thread start searching
@@ -350,7 +345,7 @@ void MainThread::search() {
       && rootMoves[0].pv[0] != MOVE_NONE)
       bestThread = Threads.get_best_thread();
 
-  if (    bookMove == MOVE_NONE
+  if (    think
       && !Experience::is_learning_paused()
       && !bestThread->rootPos.is_chess960()
       && !(bool)Options["Experience Readonly"]
@@ -489,19 +484,11 @@ void Thread::search() {
 
   size_t multiPV = size_t(Options["MultiPV"]);
   Skill skill(Options["Skill Level"], Options["UCI_LimitStrength"] ? int(Options["UCI_Elo"]) : 0);
-													
-													   
-	 
-				 
-
-										
 
   // When playing with strength handicap enable MultiPV search that we will
   // use behind the scenes to retrieve a set of possible moves.
   if (skill.enabled())
       multiPV = std::max(multiPV, (size_t)4);
-							 
-   
 
   multiPV = std::min(multiPV, rootMoves.size());
 
@@ -526,8 +513,6 @@ void Thread::search() {
 
       if (!Threads.increaseDepth)
           searchAgainCounter++;
-					   
-													  
 
       // MultiPV loop. We perform a full root search for each PV line
       for (pvIdx = 0; pvIdx < multiPV && !Threads.stop; ++pvIdx)
@@ -547,10 +532,6 @@ void Thread::search() {
           Value prev = rootMoves[pvIdx].averageScore;
           delta = Value(10) + int(prev) * prev / 16502;
           alpha = std::max(prev - delta,-VALUE_INFINITE);
-
-										   
-													  
-			  
           beta  = std::min(prev + delta, VALUE_INFINITE);
 
           // Adjust optimism based on root move's previousScore
@@ -577,7 +558,6 @@ void Thread::search() {
               // and we want to keep the same order for all the moves except the
               // new PV that goes to the front. Note that in case of MultiPV
               // search the already searched PV lines are preserved.
-									   
               std::stable_sort(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast);
 
               // If search has been stopped, we break immediately. Sorting is
@@ -678,7 +658,6 @@ void Thread::search() {
 
           // Stop the search if we have exceeded the totalTime
           if (Time.elapsed() > totalTime)
-																					 
           {
               // If we are allowed to ponder do not stop the search now but
               // keep pondering until the GUI sends "ponderhit" or "stop".
@@ -749,11 +728,9 @@ namespace {
     Key posKey;
     Move ttMove, move, excludedMove, bestMove;
     Depth extension, newDepth;
-				  
     Value bestValue, value, ttValue, eval, maxValue, probCutBeta;
     bool givesCheck, improving, priorCapture, singularQuietLMR;
     bool capture, moveCountPruning, ttCapture;
-																	  
     Piece movedPiece;
     int moveCount, captureCount, quietCount, improvement;
 
@@ -765,60 +742,18 @@ namespace {
     moveCount          = captureCount = quietCount = ss->moveCount = 0;
     bestValue          = -VALUE_INFINITE;
     maxValue           = VALUE_INFINITE;
-												
-										 
-														   
-								
 
     // Check for the available remaining time
     if (thisThread == Threads.main())
         static_cast<MainThread*>(thisThread)->check_time();
 
-						
-
     // Used to send selDepth info to GUI (selDepth counts from 1, ply from 0)
     if (PvNode && thisThread->selDepth < ss->ply + 1)
         thisThread->selDepth = ss->ply + 1;
 
-																	   
-																				 
-												
-									
-					   
-									  
-																								
-						   
-						   
-																	   
-													 
-											  
-
-																				 
-																					 
-					  
-														 
-
     if (!rootNode)
     {
-																		  
-																			
-										
-		 
-							  
-																	
-														
-
-								   
-								  
-
-							 
-												
-		 
-
         // Step 2. Check for aborted search and immediate draw
-								 
-							  
-
         if (   Threads.stop.load(std::memory_order_relaxed)
             || pos.is_draw(ss->ply)
             || ss->ply >= MAX_PLY)
@@ -925,11 +860,8 @@ namespace {
     if (  !PvNode
         && ss->ttHit
         && !excludedMove
-					 
-													 
         && tte->depth() > depth - (tte->bound() == BOUND_EXACT)
         && ttValue != VALUE_NONE // Possible in case of TT access race
-														
         && (tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
     {
         // If ttMove is quiet, update move sorting heuristics on TT hit (~2 Elo)
@@ -990,12 +922,9 @@ namespace {
 
                 Bound b =  wdl < -drawScore ? BOUND_UPPER
                          : wdl >  drawScore ? BOUND_LOWER : BOUND_EXACT;
-																   
 
                 if (    b == BOUND_EXACT
                     || (b == BOUND_LOWER ? value >= beta : value <= alpha))
-															   
-																
                 {
                     tte->save(posKey, value_to_tt(value, ss->ply), ss->ttPv, b,
                               std::min(MAX_PLY - 1, depth + 6),
@@ -1016,7 +945,6 @@ namespace {
     }
 
     CapturePieceToHistory& captureHistory = thisThread->captureHistory;
-													 
 
     // Step 6. Static evaluation of the position
     if (ss->inCheck)
@@ -1027,8 +955,6 @@ namespace {
         improvement = 0;
         goto moves_loop;
     }
-		
-	 
     else if (excludedMove)
     {
         // Providing the hint that this node's accumulator will be used often brings significant Elo gain (13 Elo)
@@ -1046,7 +972,6 @@ namespace {
 
         // ttValue can be used as a better position evaluation (~7 Elo)
         if (    ttValue != VALUE_NONE
-													   
             && (tte->bound() & (ttValue > eval ? BOUND_LOWER : BOUND_UPPER)))
             eval = ttValue;
     }
@@ -1077,28 +1002,11 @@ namespace {
     // If eval is really low check with qsearch if it can exceed alpha, if it can't,
     // return a fail low.
     if (eval < alpha - 426 - 256 * depth * depth)
-											
     {
-						   
-																					   
-							
-					 
-													   
-		
         value = qsearch<NonPV>(pos, ss, alpha - 1, alpha);
         if (value < alpha)
             return value;
     }
-														
-								 
-					   
-						 
-						
-												   
-										   
-						   
-																						  
-					   
 
     // Step 8. Futility pruning: child node (~40 Elo).
     // The depth condition is important for mate finding.
@@ -1108,11 +1016,6 @@ namespace {
         &&  eval >= beta
         &&  eval < 25128) // larger than VALUE_KNOWN_WIN, but smaller than TB wins
         return eval;
-										
-						 
-																			 
-		
-									
 
     // Step 9. Null move search with verification search (~35 Elo)
     if (   !PvNode
@@ -1135,74 +1038,37 @@ namespace {
 
         pos.do_null_move(st);
 		StateInfo* childState = pos.state();
-								   
-										   
-			
-									   
-																						 
 
         ss->kingContinuationHistory = &thisThread->continuationHistory[0][0][make_piece(us, KING)][pos.square<KING>(us)];
-									   
-																						  
-										
-								
 
         Value nullValue = -search<NonPV>(pos, ss+1, -beta, -beta+1, depth-R, !cutNode);
-			
-														  
-																	  
 
         bool needComputationAfterNM = Eval::NNUE::hint_common_parent_position(pos, true);
-								
-																	
-									
 
         pos.undo_null_move();
-											
-																			  
-											 
 
         if (nullValue >= beta)
         {
             // Do not return unproven mate or TB scores
             if (nullValue >= VALUE_TB_WIN_IN_MAX_PLY)
                 nullValue = beta;
-			
-			
-		
 
             if (thisThread->nmpMinPly || (abs(beta) < VALUE_KNOWN_WIN && depth < 14))
                 return nullValue;
 
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
-																			   
-																		  
-						
-												
-									
-																		
-															  
-												  
-		
-												
-																																	  
 
             bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
             if (needComputationBeforeNM && !needComputationAfterNM)
                 pos.copyAccFrom(childState);
-																			  
-									  
 
             // Do verification search at high depths, with null move pruning disabled
             // until ply exceeds nmpMinPly.
             thisThread->nmpMinPly = ss->ply + 3 * (depth-R) / 4;
-																									
-																						   
 
             Value v = search<NonPV>(pos, ss, beta-1, beta, depth-R, false);
 
             thisThread->nmpMinPly = 0;
-																					
 
             if (v >= beta)
                 return nullValue;
@@ -1217,10 +1083,6 @@ namespace {
     }
 
     probCutBeta = beta + 186 - 54 * improving;
-					
-										 
-																				   
-																				   
 
     // Step 10. ProbCut (~10 Elo)
     // If we have a good enough capture (or queen promotion) and a reduced search returns a value
@@ -1240,8 +1102,6 @@ namespace {
         assert(probCutBeta < VALUE_INFINITE);
 
         MovePicker mp(pos, ttMove, probCutBeta - ss->staticEval, &captureHistory);
-		
-						  
 
         while ((move = mp.next_move()) != MOVE_NONE)
             if (move != excludedMove && pos.legal(move))
@@ -1288,7 +1148,6 @@ namespace {
         return qsearch<PV>(pos, ss, alpha, beta);
 
     if (    cutNode
-								 
         &&  depth >= 7
         && !ttMove)
         depth -= 2;
@@ -1301,11 +1160,6 @@ moves_loop: // When in check, search starts here
         && !PvNode
         && depth >= 2
         && ttCapture
-					 
-					  
-								 
-												
-												 
         && (tte->bound() & BOUND_LOWER)
         && tte->depth() >= depth - 3
         && ttValue >= probCutBeta
@@ -1333,37 +1187,7 @@ moves_loop: // When in check, search starts here
     bool likelyFailLow =    PvNode
                          && ttMove
                          && (tte->bound() & BOUND_UPPER)
-											 
-
-								 
-									 
-											   
-											   
-												 
-
-								   
-									 
-												 
                          && tte->depth() >= depth;
-												 
-									 
-
-								 
-								 
-												
-
-								  
-																		 
-											   
-												
-																  
-														
-											  
-																										
-
-						   
-											   
-											   
 
     // Step 13. Loop through all pseudo-legal moves until no moves remain
     // or a beta cutoff occurs.
@@ -1378,9 +1202,6 @@ moves_loop: // When in check, search starts here
       // Move List. As a consequence any illegal move is also skipped. In MultiPV
       // mode we also skip PV moves which have been already searched and those
       // of lower "TB rank" if we are in a TB root position.
-																					
-				   
-	   
       if (rootNode && !std::count(thisThread->rootMoves.begin() + thisThread->pvIdx,
                                   thisThread->rootMoves.begin() + thisThread->pvLast, move))
           continue;
@@ -1402,45 +1223,6 @@ moves_loop: // When in check, search starts here
       capture = pos.capture_stage(move);
       movedPiece = pos.moved_piece(move);
       givesCheck = pos.gives_check(move);
-					 
-
-
-																								  
-																											
-																										  
-															 
-														 
-																									
-																   
-
-					 
-	   
-											
-													
-							  
-	   
-
-				 
-	   
-								 
-																				 
-																			 
-																				
-																				  
-									 
-
-																						  
-		   
-							  
-										
-		   
-	   
-		  
-	   
-																				 
-																			   
-										  
-				   
 
       // Calculate new depth for this move
       newDepth = depth - 1;
@@ -1457,8 +1239,6 @@ moves_loop: // When in check, search starts here
           // Skip quiet moves if movecount exceeds our FutilityMoveCount threshold (~8 Elo)
           moveCountPruning = moveCount >= futility_move_count(improving, depth);
 
-						 
-		   
           // Reduced depth of the next LMR search
           int lmrDepth = std::max(newDepth - r, 0);
 
@@ -1467,7 +1247,6 @@ moves_loop: // When in check, search starts here
           {
               // Futility pruning for captures (~2 Elo)
               if (   !givesCheck
-							  
                   && lmrDepth < 6
                   && !ss->inCheck
                   && ss->staticEval + 182 + 230 * lmrDepth + PieceValue[EG][pos.piece_on(to_sq(move))]
@@ -1515,8 +1294,6 @@ moves_loop: // When in check, search starts here
               // Futility pruning: parent node (~13 Elo)
               if (   !ss->inCheck
                   && lmrDepth < 13
-														 
-														   
                   && ss->staticEval + 103 + 138 * lmrDepth <= alpha)
                   continue;
 
@@ -1526,17 +1303,11 @@ moves_loop: // When in check, search starts here
               if (!pos.see_ge(move, Value(-24 * lmrDepth * lmrDepth - 16 * lmrDepth)))
                   continue;
           }
-		   
       }
 
       // Step 15. Extensions (~100 Elo)
       // We take care to not overdo to avoid search getting stuck.
       if (ss->ply < thisThread->rootDepth * 2)
-																				
-																		  
-																					 
-						
-							 
       {
           // Singular extension search (~94 Elo). If all moves but one fail low on a
           // search of (alpha-s, beta-s), and just one fails high on (alpha, beta),
@@ -1556,22 +1327,11 @@ moves_loop: // When in check, search starts here
               Depth singularDepth = (depth - 1) / 2;
 
               ss->excludedMove = move;
-																	
               value = search<NonPV>(pos, ss, singularBeta - 1, singularBeta, singularDepth, cutNode);
               ss->excludedMove = MOVE_NONE;
 
-								   
-		   
-											
-																				   
-						   
               if (value < singularBeta)
-											  
               {
-								
-									  
-			   
-				  
                   extension = 1;
                   singularQuietLMR = !ttCapture;
 
@@ -1579,8 +1339,6 @@ moves_loop: // When in check, search starts here
                   if (  !PvNode
                       && value < singularBeta - 25
                       && ss->doubleExtensions <= 10)
-						  
-						   
                   {
                       extension = 2;
                       depth += depth < 13;
@@ -1607,10 +1365,8 @@ moves_loop: // When in check, search starts here
               else if (ttValue <= alpha)
                   extension = -1;
           }
-	   
 
           // Check extensions (~1 Elo)
-						  
           else if (   givesCheck
                    && depth > 10
                    && abs(ss->staticEval) > 88)
@@ -1618,7 +1374,6 @@ moves_loop: // When in check, search starts here
 
           // Quiet ttMove extensions (~1 Elo)
           else if (   PvNode
-						
                    && move == ttMove
                    && move == ss->killers[0]
                    && (*contHist[0])[movedPiece][to_sq(move)] >= 5705)
@@ -1691,9 +1446,6 @@ moves_loop: // When in check, search starts here
                      - 4082;
 
       // Decrease/increase reduction for moves with a good/bad history (~25 Elo)
-							   
-								  
-								  
       r -= ss->statScore / (11079 + 4626 * (depth > 6 && depth < 19));
 
       // Step 17. Late moves reduction / extension (LMR, ~117 Elo)
@@ -1701,7 +1453,6 @@ moves_loop: // When in check, search starts here
       // been searched. In general we would like to reduce them, but there are many
       // cases where we extend a son if it has good chances to be "interesting".
       if (    depth >= 2
-							
           &&  moveCount > 1 + (PvNode && ss->ply <= 1)
           && (   !ss->ttPv
               || !capture
@@ -1756,15 +1507,11 @@ moves_loop: // When in check, search starts here
           (ss+1)->pv = pv;
           (ss+1)->pv[0] = MOVE_NONE;
 
-												 
-							
-
           value = -search<PV>(pos, ss+1, -beta, -alpha, newDepth, false);
       }
 
       // Step 19. Undo move
       pos.undo_move(move);
-	   
 
       assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);
 
@@ -1780,10 +1527,7 @@ moves_loop: // When in check, search starts here
           RootMove& rm = *std::find(thisThread->rootMoves.begin(),
                                     thisThread->rootMoves.end(), move);
 
-																   
           rm.averageScore = rm.averageScore != -VALUE_INFINITE ? (2 * value + rm.averageScore) / 3 : value;
-			  
-									  
 
           // PV move or new best move?
           if (moveCount == 1 || value > alpha)
@@ -1791,8 +1535,6 @@ moves_loop: // When in check, search starts here
               rm.score =  rm.uciScore = value;
               rm.selDepth = thisThread->selDepth;
               rm.scoreLowerbound = rm.scoreUpperbound = false;
-
-										  
 
               if (value >= beta)
               {
@@ -1847,7 +1589,6 @@ moves_loop: // When in check, search starts here
               {
                   // Reduce other moves if we have found at least one score improvement (~1 Elo)
                   if (   depth > 1
-								   
                       && beta  <  12535
                       && value > -12535)
                       depth -= 1;
@@ -1944,7 +1685,6 @@ moves_loop: // When in check, search starts here
     Key posKey;
     Move ttMove, move, bestMove;
     Depth ttDepth;
-				  
     Value bestValue, value, ttValue, futilityValue, futilityBase;
     bool pvHit, givesCheck, capture;
     int moveCount;
@@ -1960,29 +1700,11 @@ moves_loop: // When in check, search starts here
     bestMove = MOVE_NONE;
     ss->inCheck = pos.checkers();
     moveCount = 0;
-					  
-
-						
-
-									
-	 
-							  
-							 
-
-										   
-						
-	 
-
-							 
-						  
 
     // Step 2. Check for an immediate draw or maximum ply reached
     if (   pos.is_draw(ss->ply)
         || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
-
-									
-								  
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
@@ -1996,18 +1718,14 @@ moves_loop: // When in check, search starts here
     posKey = pos.key();
     tte = TT.probe(posKey, ss->ttHit);
     ttValue = ss->ttHit ? value_from_tt(tte->value(), ss->ply, pos.rule50_count()) : VALUE_NONE;
-						   
     ttMove = ss->ttHit ? tte->move() : MOVE_NONE;
     pvHit = ss->ttHit && tte->is_pv();
 
     // At non-PV nodes we check for an early TT cutoff
     if (  !PvNode
         && ss->ttHit
-					 
-														  
         && tte->depth() >= ttDepth
         && ttValue != VALUE_NONE // Only in case of TT access race
-														
         && (tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
         return ttValue;
 
@@ -2027,7 +1745,6 @@ moves_loop: // When in check, search starts here
 
             // ttValue can be used as a better position evaluation (~13 Elo)
             if (    ttValue != VALUE_NONE
-																
                 && (tte->bound() & (ttValue > bestValue ? BOUND_LOWER : BOUND_UPPER)))
                 bestValue = ttValue;
         }
@@ -2094,12 +1811,6 @@ moves_loop: // When in check, search starts here
           &&  futilityBase > -VALUE_KNOWN_WIN
           &&  type_of(move) != PROMOTION)
       {
-															
-						   
-									  
-												
-											
-		  
           if (moveCount > 2)
               continue;
 
@@ -2125,7 +1836,6 @@ moves_loop: // When in check, search starts here
 
       // Continuation history based pruning (~3 Elo)
       if (   !capture
-					   
           && (*contHist[0])[pos.moved_piece(move)][to_sq(move)] < 0
           && (*contHist[1])[pos.moved_piece(move)][to_sq(move)] < 0)
           continue;
@@ -2215,10 +1925,6 @@ moves_loop: // When in check, search starts here
   // and the graph history interaction, we return an optimal TB score instead.
 
   Value value_from_tt(Value v, int ply, int r50c) {
-
-													  
-												 
-														 
 
     if (v == VALUE_NONE)
         return VALUE_NONE;
@@ -2428,13 +2134,7 @@ string UCI::pv(const Position& pos, Depth depth) {
   size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
   uint64_t nodesSearched = Threads.nodes_searched();
   uint64_t tbHits = Threads.tb_hits() + (TB::RootInTB ? rootMoves.size() : 0);
-			   
 
-		   
-	   
-					   
-					
-	   
   for (size_t i = 0; i < multiPV; ++i)
   {
       bool updated = rootMoves[i].score != -VALUE_INFINITE;
@@ -2444,13 +2144,11 @@ string UCI::pv(const Position& pos, Depth depth) {
 
       Depth d = updated ? depth : std::max(1, depth - 1);
       Value v = updated ? rootMoves[i].uciScore : rootMoves[i].previousScore;
-											
 
       if (v == -VALUE_INFINITE)
           v = VALUE_ZERO;
 
       bool tb = TB::RootInTB && abs(v) < VALUE_MATE_IN_MAX_PLY;
-
       v = tb ? rootMoves[i].tbScore : v;
 
       if (ss.rdbuf()->in_avail()) // Not at first line

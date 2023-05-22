@@ -27,8 +27,8 @@
 #include "thread.h"
 #include "tt.h"
 #include "uci.h"
+#include "book/book.h"
 #include "syzygy/tbprobe.h"
-#include "polybook.h"
 #include "experience.h"
 
 using std::string;
@@ -44,6 +44,9 @@ static void on_clear_hash(const Option&) { Search::clear(); }
 static void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 static void on_logger(const Option& o) { start_logger(o); }
 static void on_threads(const Option& o) { Threads.set(size_t(o)); }
+static void on_book1(const Option& o) { Book::on_book(0, (string)o); }
+static void on_book2(const Option& o) { Book::on_book(1, (string)o); }
+static void on_book3(const Option& o) { Book::on_book(2, (string)o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
 static void on_contempt_c1(const Option&) { Search::init(); }
 static void on_predicted_S(const Option&) { Search::init(); }
@@ -85,6 +88,18 @@ void init(OptionsMap& o) {
   o["UCI_LimitStrength"]                   << Option(false);
   o["UCI_Elo"]                             << Option(1320, 1320, 3190);
   o["UCI_ShowWDL"]                         << Option(false);
+  o["CTG/BIN Book 1 File"]                 << Option("<empty>", on_book1);
+  o["Book 1 Width"]                        << Option(1, 1, 20);
+  o["Book 1 Depth"]                        << Option(255, 1, 255);
+  o["(CTG) Book 1 Only Green"]             << Option(true);
+  o["CTG/BIN Book 2 File"]                 << Option("<empty>", on_book2);
+  o["Book 2 Width"]                        << Option(1, 1, 20);
+  o["Book 2 Depth"]                        << Option(255, 1, 255);
+  o["(CTG) Book 2 Only Green"]             << Option(true);
+  o["CTG/BIN Book 3 File"]                 << Option("<empty>", on_book3);
+  o["Book 3 Width"]                        << Option(1, 1, 20);
+  o["Book 3 Depth"]                        << Option(255, 1, 255);
+  o["(CTG) Book 3 Only Green"]             << Option(true);
   o["SyzygyPath"]                          << Option("<empty>", on_tb_path);
   o["SyzygyProbeDepth"]                    << Option(1, 1, 100);
   o["Syzygy50MoveRule"]                    << Option(true);

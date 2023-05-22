@@ -47,7 +47,7 @@ using fun8_t = bool(*)(HANDLE, BOOL, PTOKEN_PRIVILEGES, DWORD, PTOKEN_PRIVILEGES
 #endif
 
 #include <cmath>
-				  
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -55,6 +55,7 @@ using fun8_t = bool(*)(HANDLE, BOOL, PTOKEN_PRIVILEGES, DWORD, PTOKEN_PRIVILEGES
 #include <sstream>
 #include <string_view>
 #include <vector>
+#include <stdarg.h>
 #include <bitset>
 #include <cstdlib>
 #include <regex>
@@ -159,91 +160,6 @@ public:
 };
 
 } // namespace
-
-namespace Utility
-{
-    string myFolder;
-
-    namespace
-    {
-#if defined(_WIN32) || defined (_WIN64)
-        constexpr char DirectorySeparator = '\\';
-#else
-        constexpr char DirectorySeparator = '/';
-#endif
-    }
-
-    void init(const char* arg0)
-    {
-        string s = arg0;
-        size_t i = s.find_last_of(DirectorySeparator);
-        if (i != string::npos)
-            myFolder = s.substr(0, i);
-    }
-
-    //Remove double or single quotes from a string
-    string unquote(const string& s)
-    {
-        string s1 = s;
-
-        if (s1.size() > 2)
-        {
-            if ((s1.front() == '\"' && s1.back() == '\"') || (s1.front() == '\'' && s1.back() == '\''))
-            {
-                s1 = s1.substr(1, s1.size() - 2);
-            }
-        }
-
-        return s1;
-    }
-
-    //Map relative folder or filename to local directory of the engine executable
-    string map_path(const string& path)
-    {
-        string newPath = path;
-
-        //Make sure we have something to work on
-        if (!path.size() || !myFolder.size())
-            return path;
-
-        //Make sure we can map this path
-        if (newPath.find(DirectorySeparator) == string::npos)
-            newPath = myFolder + DirectorySeparator + newPath;
-
-        return newPath;
-    }
-
-    bool file_exists(const string& filename)
-    {
-        struct stat info;
-        if (stat(filename.c_str(), &info) == 0)
-            return (info.st_mode & S_IFREG) == S_IFREG;
-
-        return false;
-    }
-
-    bool is_game_decided(const Position& pos, Value lastScore)
-    {
-        //Assume game is decided if game ply is above 200
-        if (pos.game_ply() > 200)
-            return true;
-
-        //Assume game is decided if |last score| is above 2.5 Pawn
-        if (lastScore != VALUE_NONE && std::abs(lastScore) > PawnValueEg * 5 / 2)
-            return true;
-
-        //Assume game is decided if |last score| is below 0.25 Pawn and game ply is above 120
-        if (pos.game_ply() > 120 && lastScore < PawnValueEg / 4)
-            return true;
-
-        //Assume game is decided if remaining pieces is less than 9
-        if (pos.count<ALL_PIECES>() < 9)
-            return true;
-
-        //Assume game is not decided!
-        return false;
-    }
-}
 
 /// engine_info() returns the full name of the current SugaR version. This
 /// will be either "SugaR <Tag> DD-MM-YY" (where DD-MM-YY is the date when
@@ -375,7 +291,16 @@ std::string compiler_info() {
   #endif
 
   #if !defined(NDEBUG)
+    compiler += " DEBUG";
   #endif
+
+  compiler += "\n__VERSION__ macro expands to: ";
+  #ifdef __VERSION__
+     compiler += __VERSION__;
+  #else
+     compiler += "(undefined macro)";
+  #endif
+  compiler += "\n";
 
   return compiler;
 }
@@ -1245,29 +1170,25 @@ static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize
       return nullptr;
 
   // Dynamically link OpenProcessToken, LookupPrivilegeValue and AdjustTokenPrivileges
-
-  HMODULE hAdvapi32 = GetModuleHandle(TEXT("advapi32.dll"));
-
-  if (!hAdvapi32)
-      hAdvapi32 = LoadLibrary(TEXT("advapi32.dll"));
-
-  auto fun6 = (fun6_t)(void(*)())GetProcAddress(hAdvapi32, "OpenProcessToken");
+  HMODULE k32 = GetModuleHandle("Advapi32.dll");
+  auto fun6 = (fun6_t)(void(*)())GetProcAddress(k32, "OpenProcessToken");
   if (!fun6)
       return nullptr;
-  auto fun7 = (fun7_t)(void(*)())GetProcAddress(hAdvapi32, "LookupPrivilegeValueA");
+  auto fun7 = (fun7_t)(void(*)())GetProcAddress(k32, "LookupPrivilegeValueA");
   if (!fun7)
       return nullptr;
-  auto fun8 = (fun8_t)(void(*)())GetProcAddress(hAdvapi32, "AdjustTokenPrivileges");
+  auto fun8 = (fun8_t)(void(*)())GetProcAddress(k32, "AdjustTokenPrivileges");
   if (!fun8)
       return nullptr;
+            
 
   // We need SeLockMemoryPrivilege, so try to enable it for the process
-  if (!fun6( // OpenProcessToken()
-      GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hProcessToken))
-          return nullptr;
+  // OpenProcessToken()
+  if (!fun6(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hProcessToken))
+      return nullptr;
 
-  if (fun7( // LookupPrivilegeValue(nullptr, SE_LOCK_MEMORY_NAME, &luid)
-      nullptr, "SeLockMemoryPrivilege", &luid))
+  // LookupPrivilegeValueA()
+  if (fun7(nullptr, SE_LOCK_MEMORY_NAME, &luid))
   {
       TOKEN_PRIVILEGES tp { };
       TOKEN_PRIVILEGES prevTp { };
@@ -1279,7 +1200,8 @@ static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize
 
       // Try to enable SeLockMemoryPrivilege. Note that even if AdjustTokenPrivileges() succeeds,
       // we still need to query GetLastError() to ensure that the privileges were actually obtained.
-      if (fun8( // AdjustTokenPrivileges()
+      // AdjustTokenPrivileges()
+      if (fun8(
               hProcessToken, FALSE, &tp, sizeof(TOKEN_PRIVILEGES), &prevTp, &prevTpLen) &&
           GetLastError() == ERROR_SUCCESS)
       {
@@ -1289,8 +1211,8 @@ static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize
               nullptr, allocSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
 
           // Privilege no longer needed, restore previous state
-          fun8( // AdjustTokenPrivileges ()
-              hProcessToken, FALSE, &prevTp, 0, nullptr, nullptr);
+	  // AdjustTokenPrivileges ()
+          fun8(hProcessToken, FALSE, &prevTp, 0, nullptr, nullptr);
       }
   }
 
@@ -1478,10 +1400,11 @@ void bindThisThread(size_t idx) {
   if (!fun4 || !fun5)
   {
       GROUP_AFFINITY affinity;
-      if (fun2(node, &affinity)){                                                 // GetNumaNodeProcessorMaskEx
-		sync_cout << "info string Binding thread " << idx << " to node " << node << sync_endl;
-	  }
+      if (fun2(node, &affinity))                                                 // GetNumaNodeProcessorMaskEx
+      {
           fun3(GetCurrentThread(), &affinity, nullptr);                          // SetThreadGroupAffinity
+          sync_cout << "info string Binding thread " << idx << " to node " << node << sync_endl;
+      }
   }
   else
   {
@@ -1543,7 +1466,7 @@ void init([[maybe_unused]] int argc, char* argv[]) {
     // extract the binary directory path from argv0
     binaryDirectory = argv0;
     size_t pos = binaryDirectory.find_last_of("\\/");
-    if (pos == std::string::npos)
+    if (pos == string::npos)
         binaryDirectory = "." + pathSeparator;
     else
         binaryDirectory.resize(pos + 1);
@@ -1551,9 +1474,189 @@ void init([[maybe_unused]] int argc, char* argv[]) {
     // pattern replacement: "./" at the start of path is replaced by the working directory
     if (binaryDirectory.find("." + pathSeparator) == 0)
         binaryDirectory.replace(0, 1, workingDirectory);
+
+    binaryDirectory = Utility::fix_path(binaryDirectory);
+    workingDirectory = Utility::fix_path(workingDirectory);
+
 }
 
 
 } // namespace CommandLine
+
+namespace Utility
+{
+    string myFolder;
+
+    void init(const char* arg0)
+    {
+        string s = arg0;
+        size_t i = s.find_last_of(DirectorySeparator);
+        if (i != string::npos)
+            myFolder = s.substr(0, i);
+    }
+
+    bool file_exists(const string& filename)
+    {
+        struct stat info;
+        if (stat(filename.c_str(), &info) == 0)
+            return (info.st_mode & S_IFREG) == S_IFREG;
+
+        return false;
+    }
+
+    bool is_game_decided(const Position& pos, Value lastScore)
+    {
+        //Assume game is decided if game ply is above 200
+        if (pos.game_ply() > 200)
+            return true;
+
+        //Assume game is decided if |last score| is above 2.5 Pawn
+        if (lastScore != VALUE_NONE && std::abs(lastScore) > PawnValueEg * 5 / 2)
+            return true;
+
+        //Assume game is decided if |last score| is below 0.25 Pawn and game ply is above 120
+        if (pos.game_ply() > 120 && lastScore < PawnValueEg / 4)
+            return true;
+
+        //Assume game is decided if remaining pieces is less than 9
+        if (pos.count<ALL_PIECES>() < 9)
+            return true;
+
+        //Assume game is not decided!
+        return false;
+    }
+
+    string unquote(const string& s)
+    {
+        string s1 = s;
+
+        if (s1.size() > 2)
+        {
+            if ((s1.front() == '\"' && s1.back() == '\"') || (s1.front() == '\'' && s1.back() == '\''))
+            {
+                s1 = s1.substr(1, s1.size() - 2);
+            }
+        }
+
+        return s1;
+    }
+
+    bool is_empty_filename(const string &fn)
+    {
+        if (fn.empty())
+            return true;
+
+        static string Empty = EMPTY;
+        return equal(
+            fn.begin(), fn.end(),
+            Empty.begin(), Empty.end(),
+            [](char a, char b) { return tolower(a) == tolower(b); });
+    }
+
+    string fix_path(const string& p)
+    {
+        if (is_empty_filename(p))
+            return p;
+
+        string p1 = unquote(p);
+        replace(p1.begin(), p1.end(), ReverseDirectorySeparator, DirectorySeparator);
+
+        return p1;
+    }
+
+    string combine_path(const string& p1, const string& p2)
+    {
+        //We don't expect the first part of the path to be empty!
+        assert(is_empty_filename(p1) == false);
+
+        if (is_empty_filename(p2))
+            return p2;
+
+        string p;
+        if (p1.back() == DirectorySeparator || p1.back() == ReverseDirectorySeparator)
+            p = p1 + p2;
+        else
+            p = p1 + DirectorySeparator + p2;
+
+        return fix_path(p);
+    }
+
+    string map_path(const string& p)
+    {
+        if (is_empty_filename(p))
+            return p;
+
+        string p2 = fix_path(p);
+
+        //Make sure we can map this path
+        if (p2.find(DirectorySeparator) == string::npos)
+            p2 = combine_path(CommandLine::binaryDirectory, p);
+
+        return p2;
+    }
+
+    size_t get_file_size(const string& f)
+    {
+        if(is_empty_filename(f))
+            return (size_t)-1;
+
+        ifstream in(map_path(f), ifstream::ate | ifstream::binary);
+        if (!in.is_open())
+            return (size_t)-1;
+
+        return (size_t)in.tellg();
+    }
+
+    bool is_same_file(const string& f1, const string& f2)
+    {
+        return map_path(f1) == map_path(f2);
+    }
+
+    string format_bytes(uint64_t bytes, int decimals)
+    {
+        static const uint64_t KB = 1024;
+        static const uint64_t MB = KB * 1024;
+        static const uint64_t GB = MB * 1024;
+        static const uint64_t TB = GB * 1024;
+
+        stringstream ss;
+
+        if (bytes < KB)
+            ss << bytes << " B";
+        else if (bytes < MB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / KB) << "KB";
+        else if (bytes < GB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / MB) << "MB";
+        else if (bytes < TB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / GB) << "GB";
+        else
+            ss << fixed << setprecision(decimals) << ((double)bytes / TB) << "TB";
+
+        return ss.str();
+    }
+
+    //Code is an `edited` version of: https://stackoverflow.com/a/49812018
+    string format_string(const char* const fmt, ...)
+    {
+        //Initialize use of the variable arguments
+        va_list vaArgs;
+        va_start(vaArgs, fmt);
+
+        //Acquire the required string size
+        va_start(vaArgs, fmt);
+        int len = vsnprintf(nullptr, 0, fmt, vaArgs);
+        va_end(vaArgs);
+
+        
+        //Allocate enough buffer and format
+        vector<char> v(len + 1);
+        
+        va_start(vaArgs, fmt);
+        vsnprintf(v.data(), v.size(), fmt, vaArgs);
+        va_end(vaArgs);
+
+        return string(v.data(), len);
+    }
+} // namespace Utility
 
 } // namespace Stockfish

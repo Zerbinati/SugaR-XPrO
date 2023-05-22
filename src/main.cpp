@@ -30,7 +30,7 @@
 #include "tt.h"
 #include "uci.h"
 #include "experience.h"
-
+#include "book/book.h"
 using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
@@ -64,6 +64,7 @@ int main(int argc, char* argv[]) {
   Threads.set(size_t(Options["Threads"]));
   Search::clear(); // After threads are up
   Eval::NNUE::init();
+  Book::init();
 
   UCI::loop(argc, argv);
 
