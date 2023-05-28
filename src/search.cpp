@@ -860,7 +860,7 @@ namespace {
     if (  !PvNode
         && !excludedMove
         && tte->depth() > depth - (tte->bound() == BOUND_EXACT)
-        && ttValue != VALUE_NONE // Only in case of TT access race or if !ttHit
+        && ttValue != VALUE_NONE // Possible in case of TT access race or if !ttHit
         && (tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
     {
         // If ttMove is quiet, update move sorting heuristics on TT hit (~2 Elo)
@@ -1720,7 +1720,7 @@ moves_loop: // When in check, search starts here
     // At non-PV nodes we check for an early TT cutoff
     if (  !PvNode
         && tte->depth() >= ttDepth
-        && ttValue != VALUE_NONE // Possible in case of TT access race or if !ttHit
+        && ttValue != VALUE_NONE // Only in case of TT access race or if !ttHit
         && (tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
         return ttValue;
 
