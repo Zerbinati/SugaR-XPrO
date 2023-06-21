@@ -253,9 +253,9 @@ namespace Stockfish::Eval::NNUE {
     // Read network parameters
     bool read_parameters(std::istream& stream) {
 
-      read_little_endian<BiasType      >(stream, biases     , HalfDimensions                  );
-      read_little_endian<WeightType    >(stream, weights    , HalfDimensions * InputDimensions);
-      read_little_endian<PSQTWeightType>(stream, psqtWeights, PSQTBuckets    * InputDimensions);
+      read_leb_128<BiasType      >(stream, biases     , HalfDimensions                  );
+      read_leb_128<WeightType    >(stream, weights    , HalfDimensions * InputDimensions);
+      read_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets    * InputDimensions);
 
       return !stream.fail();
     }
@@ -263,9 +263,9 @@ namespace Stockfish::Eval::NNUE {
     // Write network parameters
     bool write_parameters(std::ostream& stream) const {
 
-      write_little_endian<BiasType      >(stream, biases     , HalfDimensions                  );
-      write_little_endian<WeightType    >(stream, weights    , HalfDimensions * InputDimensions);
-      write_little_endian<PSQTWeightType>(stream, psqtWeights, PSQTBuckets    * InputDimensions);
+      write_leb_128<BiasType      >(stream, biases     , HalfDimensions                  );
+      write_leb_128<WeightType    >(stream, weights    , HalfDimensions * InputDimensions);
+      write_leb_128<PSQTWeightType>(stream, psqtWeights, PSQTBuckets    * InputDimensions);
 
       return !stream.fail();
     }
@@ -335,10 +335,9 @@ namespace Stockfish::Eval::NNUE {
       return psqt;
     } // end of function transform()
 
-    bool hint_common_access(const Position& pos, bool checkOnly) const {
-      bool a = hint_common_access_for_perspective<WHITE>(pos, checkOnly);
-      bool b = hint_common_access_for_perspective<BLACK>(pos, checkOnly);
-      return a || b;
+    void hint_common_access(const Position& pos) const {
+      hint_common_access_for_perspective<WHITE>(pos);
+      hint_common_access_for_perspective<BLACK>(pos);
     }
 
    private:
@@ -614,7 +613,7 @@ namespace Stockfish::Eval::NNUE {
     }
 
     template<Color Perspective>
-    bool hint_common_access_for_perspective(const Position& pos, bool checkOnly) const {
+    void hint_common_access_for_perspective(const Position& pos) const {
 
       // Works like update_accumulator, but performs less work.
       // Updates ONLY the accumulator for pos.
@@ -623,10 +622,7 @@ namespace Stockfish::Eval::NNUE {
       // of the estimated gain in terms of features to be added/subtracted.
       // Fast early exit.
       if (pos.state()->accumulator.computed[Perspective])
-        return false;
-
-      if (checkOnly)
-        return true;
+        return;
 
       auto [oldest_st, _] = try_find_computed_accumulator<Perspective>(pos);
 
@@ -640,7 +636,7 @@ namespace Stockfish::Eval::NNUE {
       {
         update_accumulator_refresh<Perspective>(pos);
       }
-      return true;    }
+    }
 
     template<Color Perspective>
     void update_accumulator(const Position& pos) const {
