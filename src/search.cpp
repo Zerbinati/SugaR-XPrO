@@ -183,6 +183,7 @@ void Search::clear() {
   Experience::resume_learning();
 }
 
+
 /// MainThread::search() is started when the program receives the UCI 'go'
 /// command. It searches from the root position and outputs the "bestmove".
 
@@ -419,18 +420,7 @@ void MainThread::search() {
   sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
 
   if (bestThread->rootMoves[0].pv.size() > 1 || bestThread->rootMoves[0].extract_ponder_from_tt(rootPos))
-  {
-      StateInfo si[2];
-      rootPos.do_move(bestThread->rootMoves[0].pv[0], si[0]);
-      rootPos.do_move(bestThread->rootMoves[0].pv[1], si[1]);
-      predictedPositionKey = rootPos.key();
-      rootPos.undo_move(bestThread->rootMoves[0].pv[1]);
-      rootPos.undo_move(bestThread->rootMoves[0].pv[0]);
-
       std::cout << " ponder " << UCI::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
-  }
-  else
-      predictedPositionKey = 0;
 
   std::cout << sync_endl;
 }
@@ -459,9 +449,7 @@ void Thread::search() {
   std::memset(ss-7, 0, 10 * sizeof(Stack));
   for (int i = 7; i > 0; --i)
   {
-      Color c = Color(us ^ (i & 1));
       (ss-i)->continuationHistory = &this->continuationHistory[0][0][NO_PIECE][0]; // Use as a sentinel
-      (ss-i)->kingContinuationHistory = &this->continuationHistory[0][0][make_piece(c, KING)][rootPos.square<KING>(c)]; // Use as a sentinel
       (ss-i)->staticEval = VALUE_NONE;
   }
 
@@ -535,9 +523,7 @@ void Thread::search() {
           beta  = std::min(prev + delta, VALUE_INFINITE);
 
           // Adjust optimism based on root move's previousScore
-		  int contempt = prev > 0 ? (int)Options["Contempt Value"] : 0;
-          int opt = 109 * (prev + contempt) / (std::abs(prev + contempt) + 141);
-		  
+          int opt = 109 * prev / (std::abs(prev) + 141);
           optimism[ us] = Value(opt);
           optimism[~us] = -optimism[us];
 
@@ -648,8 +634,8 @@ void Thread::search() {
           timeReduction = lastBestMoveDepth + 8 < completedDepth ? 1.57 : 0.65;
           double reduction = (1.4 + mainThread->previousTimeReduction) / (2.08 * timeReduction);
           double bestMoveInstability = 1 + 1.8 * totBestMoveChanges / Threads.size();
-		  double predictedOpponentMove = mainThread->predictedPositionKey == rootPos.key() ? (int)Options["Predicted Move Successful"]/1000.0 : (int)Options["Predicted Move Failed"]/1000.0;
-          double totalTime = Time.optimum() * fallingEval * reduction * bestMoveInstability * predictedOpponentMove;
+
+          double totalTime = Time.optimum() * fallingEval * reduction * bestMoveInstability;
 
           // Cap used time in case of a single legal move for a better viewer experience in tournaments
           // yielding correct scores and sufficiently fast moves.
@@ -1036,13 +1022,8 @@ namespace {
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
 
         pos.do_null_move(st);
-		StateInfo* childState = pos.state();
-
-        ss->kingContinuationHistory = &thisThread->continuationHistory[0][0][make_piece(us, KING)][pos.square<KING>(us)];
 
         Value nullValue = -search<NonPV>(pos, ss+1, -beta, -beta+1, depth-R, !cutNode);
-
-        bool needComputationAfterNM = Eval::NNUE::hint_common_parent_position(pos, true);
 
         pos.undo_null_move();
 
@@ -1056,10 +1037,6 @@ namespace {
 
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
-            bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
-            if (needComputationBeforeNM && !needComputationAfterNM)
-                pos.copyAccFrom(childState);
-
             // Do verification search at high depths, with null move pruning disabled
             // until ply exceeds nmpMinPly.
             thisThread->nmpMinPly = ss->ply + 3 * (depth-R) / 4;
@@ -1071,16 +1048,9 @@ namespace {
             if (v >= beta)
                 return nullValue;
         }
-
-        else
-        {
-            bool needComputationBeforeNM = Eval::NNUE::hint_common_parent_position(pos, true);
-            if (needComputationBeforeNM && !needComputationAfterNM)
-                pos.copyAccFrom(childState);
-        }
     }
 
-    // Step 10. If the position doesn't a have ttMove, decrease depth by 2
+    // Step 10. If the position doesn't have a ttMove, decrease depth by 2
     // (or by 4 if the TT entry for the current position was hit and the stored depth is greater than or equal to the current depth).
     // Use qsearch if depth is equal or below zero (~9 Elo)
     if (    PvNode
@@ -1127,8 +1097,6 @@ namespace {
                                                                           [to_sq(move)];
 
                 pos.do_move(move, st);
-
-                ss->kingContinuationHistory = &thisThread->continuationHistory[ss->inCheck][true][make_piece(us, KING)][pos.square<KING>(us)];
 
                 // Perform a preliminary qsearch to verify that the move holds
                 value = -qsearch<NonPV>(pos, ss+1, -probCutBeta, -probCutBeta+1);
@@ -1312,6 +1280,9 @@ moves_loop: // When in check, search starts here
           // then that move is singular and should be extended. To verify this we do
           // a reduced search on all the other moves but the ttMove and if the
           // result is lower than ttValue minus a margin, then we will extend the ttMove.
+          // Depth margin and singularBeta margin are known for having non-linear scaling.
+          // Their values are optimized to time controls of 180+1.8 and longer
+          // so changing them requires tests at this type of time controls.
           if (   !rootNode
               &&  depth >= 4 - (thisThread->completedDepth > 22) + 2 * (PvNode && tte->is_pv())
               &&  move == ttMove
@@ -1393,14 +1364,6 @@ moves_loop: // When in check, search starts here
 
       // Step 16. Make the move
       pos.do_move(move, st, givesCheck);
-
-      ss->kingContinuationHistory = &thisThread->continuationHistory[ss->inCheck][capture][make_piece(us, KING)][pos.square<KING>(us)];
-
-      // Hint this node for updating
-      if (  !capture
-          && type_of(movedPiece) != KING
-          && depth > (PvNode ? 3 : 5))
-          Eval::NNUE::hint_common_parent_position(pos);
 
       // Decrease reduction if position is or has been on the PV
       // and node is not likely to fail low. (~3 Elo)
@@ -2009,8 +1972,6 @@ moves_loop: // When in check, search starts here
   // by moves at ply -1, -2, -4, and -6 with current move.
 
   void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus) {
-
-   (*(ss-1)->kingContinuationHistory)[pc][to] << bonus / 8;
 
     for (int i : {1, 2, 4, 6})
     {

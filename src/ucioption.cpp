@@ -48,7 +48,6 @@ static void on_book1(const Option& o) { Book::on_book(0, (string)o); }
 static void on_book2(const Option& o) { Book::on_book(1, (string)o); }
 static void on_book3(const Option& o) { Book::on_book(2, (string)o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
-static void on_contempt_c1(const Option&) { Search::init(); }
 static void on_predicted_S(const Option&) { Search::init(); }
 static void on_predicted_F(const Option&) { Search::init(); }
 static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
@@ -76,7 +75,6 @@ void init(OptionsMap& o) {
   o["Threads"]                             << Option(1, 1, 1024, on_threads);
   o["Hash"]                                << Option(16, 1, MaxHashMB, on_hash_size);
   o["Clear Hash"]                          << Option(on_clear_hash);
-  o["Contempt Value"]                      << Option(25, 0, 100, on_contempt_c1);
   o["Ponder"]                              << Option(false);
   o["MultiPV"]                             << Option(1, 1, 500);
   o["Skill Level"]                         << Option(20, 0, 20);
@@ -116,8 +114,6 @@ void init(OptionsMap& o) {
   o["EvalFile"]                            << Option(EvalFileDefaultName, on_eval_file);
   o["Materialistic Evaluation Strategy"]   << Option(-0, -96, 96, on_materialistic_evaluation_strategy);
   o["Positional Evaluation Strategy"]      << Option(0, -96, 96, on_positional_evaluation_strategy);
-  o["Predicted Move Successful"]           << Option(900, 0, 1500, on_predicted_S);
-  o["Predicted Move Failed"]               << Option(1100, 0, 1500, on_predicted_F);
 }
 
 

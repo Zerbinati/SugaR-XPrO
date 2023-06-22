@@ -61,7 +61,6 @@ namespace Stockfish {
 namespace Eval {
 
   bool useNNUE;
-  int contempt;
   string currentEvalFileName = "None";
   int NNUE::MaterialisticEvaluationStrategy = 0;
   int NNUE::PositionalEvaluationStrategy = 0;
@@ -1040,7 +1039,6 @@ make_v:
 
     // Side to move point of view
     v = (pos.side_to_move() == WHITE ? v : -v);
-	Eval::contempt = kingAttackersCount[pos.side_to_move()] > 3 ? 20 : 0;
 
     return v;
   }
