@@ -48,8 +48,6 @@ static void on_book1(const Option& o) { Book::on_book(0, (string)o); }
 static void on_book2(const Option& o) { Book::on_book(1, (string)o); }
 static void on_book3(const Option& o) { Book::on_book(2, (string)o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
-static void on_predicted_S(const Option&) { Search::init(); }
-static void on_predicted_F(const Option&) { Search::init(); }
 static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
 static void on_exp_file(const Option& /*o*/) { Experience::init(); }
 static void on_use_NNUE(const Option&) { Eval::NNUE::init(); }
@@ -78,6 +76,7 @@ void init(OptionsMap& o) {
   o["Ponder"]                              << Option(false);
   o["MultiPV"]                             << Option(1, 1, 500);
   o["Skill Level"]                         << Option(20, 0, 20);
+  o["Contempt"]                            << Option(20, -100, 100);
   o["Move Overhead"]                       << Option(10, 0, 5000);
   o["Minimum Thinking Time"]               << Option(100, 0, 5000);
   o["Slow Mover"]                          << Option(100, 10, 1000);
