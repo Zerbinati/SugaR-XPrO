@@ -50,7 +50,6 @@ static void on_book3(const Option& o) { Book::on_book(2, (string)o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
 static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
 static void on_exp_file(const Option& /*o*/) { Experience::init(); }
-static void on_use_NNUE(const Option&) { Eval::NNUE::init(); }
 static void on_eval_file(const Option&) { Eval::NNUE::init(); }
 static void on_materialistic_evaluation_strategy(const Option& o) { Eval::NNUE::MaterialisticEvaluationStrategy = (int)o; }
 static void on_positional_evaluation_strategy(const Option& o) { Eval::NNUE::PositionalEvaluationStrategy = (int)o; }
@@ -109,7 +108,6 @@ void init(OptionsMap& o) {
   o["Experience Book Eval Importance"]     << Option(5, 0, 10);
   o["Experience Book Min Depth"]           << Option(27, EXP_MIN_DEPTH, 64);
   o["Experience Book Max Moves"]           << Option(100, 1, 100);
-  o["Use NNUE"]                            << Option(true, on_use_NNUE);
   o["EvalFile"]                            << Option(EvalFileDefaultName, on_eval_file);
   o["Materialistic Evaluation Strategy"]   << Option(-0, -96, 96, on_materialistic_evaluation_strategy);
   o["Positional Evaluation Strategy"]      << Option(0, -96, 96, on_positional_evaluation_strategy);
