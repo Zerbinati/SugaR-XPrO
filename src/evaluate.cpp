@@ -58,7 +58,6 @@ namespace Eval {
 
   string currentEvalFileName = "None";
 
-  static double to_cp(Value v) { return double(v) / UCI::NormalizeToPawnValue; }
   int NNUE::MaterialisticEvaluationStrategy = 0;
   int NNUE::PositionalEvaluationStrategy = 0;
 
@@ -196,11 +195,11 @@ std::string Eval::trace(Position& pos) {
   Value v;
   v = NNUE::evaluate(pos, false);
   v = pos.side_to_move() == WHITE ? v : -v;
-  ss << "NNUE evaluation        " << to_cp(v) << " (white side)\n";
+  ss << "NNUE evaluation        " << 0.01 * UCI::to_cp(v) << " (white side)\n";
 
   v = evaluate(pos);
   v = pos.side_to_move() == WHITE ? v : -v;
-  ss << "Final evaluation       " << to_cp(v) << " (white side)";
+  ss << "Final evaluation       " << 0.01 * UCI::to_cp(v) << " (white side)";
   ss << " [with scaled NNUE, ...]";
   ss << "\n";
 
