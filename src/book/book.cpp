@@ -35,9 +35,11 @@ namespace Stockfish::Book
         for (size_t i = 0; i < NumBooks; ++i)
             books[i] = nullptr;
 
-        on_book(0, (string)Options["CTG/BIN Book 1 File"]);
-        on_book(1, (string)Options["CTG/BIN Book 2 File"]);
-		on_book(2, (string)Options["CTG/BIN Book 3 File"]);
+        on_book(0, (string)Options["ECO Flank opening"]);
+        on_book(1, (string)Options["ECO Semi-Open Game"]);
+		on_book(2, (string)Options["ECO Open Game"]);
+		on_book(3, (string)Options["ECO Closed Game"]);
+		on_book(4, (string)Options["ECO Indian Defence"]);
     }
 
     void finalize()
