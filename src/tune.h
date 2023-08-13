@@ -97,7 +97,6 @@ class Tune {
 
     static_assert(   std::is_same<T,   int>::value
                   || std::is_same<T, Value>::value
-                  || std::is_same<T, Score>::value
                   || std::is_same<T, PostUpdate>::value, "Parameter type not supported!");
 
     Entry(const std::string& n, T& v, const SetRange& r) : name(n), value(v), range(r) {}
