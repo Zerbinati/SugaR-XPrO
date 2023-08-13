@@ -22,7 +22,6 @@
 #include "evaluate.h"
 #include "misc.h"
 #include "position.h"
-#include "psqt.h"
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "thread.h"
@@ -54,7 +53,6 @@ int main(int argc, char* argv[]) {
 
   UCI::init(Options);
   Tune::init();
-  PSQT::init();
   Bitboards::init();
   Position::init();
   Experience::init();
