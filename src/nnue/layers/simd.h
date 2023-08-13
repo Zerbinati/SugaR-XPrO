@@ -283,7 +283,6 @@ namespace Stockfish::Simd {
       product = vmlal_s8(product, a1, b1);
       acc = vpadalq_s16(acc, product);
     }
-
 #endif
 
 #if USE_NEON >= 8

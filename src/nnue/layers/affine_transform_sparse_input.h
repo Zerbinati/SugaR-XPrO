@@ -273,4 +273,4 @@ namespace Stockfish::Eval::NNUE::Layers {
 
 }  // namespace Stockfish::Eval::NNUE::Layers
 
-#endif // #ifndef NNUE_LAYERS_AFFINE_TRANSFORM_SPARSE_INPUT_H_INCLUDE
+#endif // #ifndef NNUE_LAYERS_AFFINE_TRANSFORM_SPARSE_INPUT_H_INCLUDED
