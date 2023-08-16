@@ -37,7 +37,6 @@ namespace Stockfish::Book
 
         on_book(0, (string)Options["CTG/BIN Book 1 File"]);
         on_book(1, (string)Options["CTG/BIN Book 2 File"]);
-		on_book(2, (string)Options["CTG/BIN Book 3 File"]);
     }
 
     void finalize()

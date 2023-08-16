@@ -46,7 +46,6 @@ static void on_logger(const Option& o) { start_logger(o); }
 static void on_threads(const Option& o) { Threads.set(size_t(o)); }
 static void on_book1(const Option& o) { Book::on_book(0, (string)o); }
 static void on_book2(const Option& o) { Book::on_book(1, (string)o); }
-static void on_book3(const Option& o) { Book::on_book(2, (string)o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
 static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
 static void on_exp_file(const Option& /*o*/) { Experience::init(); }
@@ -91,10 +90,6 @@ void init(OptionsMap& o) {
   o["Book 2 Width"]                        << Option(1, 1, 20);
   o["Book 2 Depth"]                        << Option(255, 1, 255);
   o["(CTG) Book 2 Only Green"]             << Option(true);
-  o["CTG/BIN Book 3 File"]                 << Option("<empty>", on_book3);
-  o["Book 3 Width"]                        << Option(1, 1, 20);
-  o["Book 3 Depth"]                        << Option(255, 1, 255);
-  o["(CTG) Book 3 Only Green"]             << Option(true);
   o["SyzygyPath"]                          << Option("<empty>", on_tb_path);
   o["SyzygyProbeDepth"]                    << Option(1, 1, 100);
   o["Syzygy50MoveRule"]                    << Option(true);
@@ -108,9 +103,8 @@ void init(OptionsMap& o) {
   o["Experience Book Min Depth"]           << Option(27, EXP_MIN_DEPTH, 64);
   o["Experience Book Max Moves"]           << Option(100, 1, 100);
   o["EvalFile"]                            << Option(EvalFileDefaultName, on_eval_file);
-  o["Materialistic Evaluation Strategy"]   << Option(-0, -96, 96, on_materialistic_evaluation_strategy);
-  o["Positional Evaluation Strategy"]      << Option(0, -96, 96, on_positional_evaluation_strategy);
-}
+  o["Materialistic Evaluation Strategy"]   << Option(-0, -12, 12, on_materialistic_evaluation_strategy);
+  o["Positional Evaluation Strategy"]      << Option(-0, -12, 12, on_positional_evaluation_strategy);}
 
 
 /// operator<<() is used to print all the options default values in chronological
