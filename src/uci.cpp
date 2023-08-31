@@ -1,13 +1,13 @@
 /*
-  SugaR, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
-  SugaR is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  SugaR is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -24,7 +24,6 @@
 
 #include "benchmark.h"
 #include "evaluate.h"
-#include "experience.h"
 #include "movegen.h"
 #include "position.h"
 #include "search.h"
@@ -32,7 +31,6 @@
 #include "timeman.h"
 #include "tt.h"
 #include "uci.h"
-#include "book/book.h"
 #include "syzygy/tbprobe.h"
 #include "nnue/evaluate_nnue.h"
 
@@ -72,18 +70,12 @@ namespace {
     states = StateListPtr(new std::deque<StateInfo>(1)); // Drop the old state and create a new one
     pos.set(fen, Options["UCI_Chess960"], &states->back(), Threads.main());
 
-    Key firstKey = pos.key();
-
     // Parse the move list, if any
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
     {
         states->emplace_back();
         pos.do_move(m, states->back());
     }
-
-    static constexpr Key StartPosKey = 0xB4D30CD15A43432D;
-    if (firstKey == StartPosKey && pos.game_ply() == 0)
-        Experience::resume_learning();
   }
 
   // trace_eval() prints the evaluation of the current position, consistent with
@@ -282,13 +274,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "go")         go(pos, is, states);
       else if (token == "position")   position(pos, is, states);
       else if (token == "ucinewgame") Search::clear();
-      else if (token == "isready")
-      {
-          //Make sure experience has finished loading
-          Experience::wait_for_loading_finished();
-
-          sync_cout << "readyok" << sync_endl;
-      }
+      else if (token == "isready")    sync_cout << "readyok" << sync_endl;
 
       // Add custom non-UCI commands, mainly for debugging purposes.
       // These commands must not be used during a search!
@@ -296,13 +282,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "bench")    bench(pos, is, states);
       else if (token == "d")        sync_cout << pos << sync_endl;
       else if (token == "eval")     trace_eval(pos);
-      else if (token == "book")    Book::show_moves(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
-      else if (argc > 2 && token == "defrag")   Experience::defrag(argc - 2, argv + 2);
-      else if (argc > 2 && token == "merge")    Experience::merge(argc - 2, argv + 2);
-      else if (token == "exp")                  Experience::show_exp(pos, false);
-      else if (token == "expex")                Experience::show_exp(pos, true);
-      else if (argc > 2 && token == "convert_compact_pgn") Experience::convert_compact_pgn(argc - 2, argv + 2);
       else if (token == "export_net")
       {
           std::optional<std::string> filename;

@@ -1,13 +1,13 @@
 /*
-  SugaR, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
-  SugaR is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  SugaR is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -51,18 +51,17 @@ struct SetRange {
 /// qualifiers from the variables you want to tune and flag them for tuning, so
 /// if you have:
 ///
-///   const Score myScore = S(10, 15);
 ///   const Value myValue[][2] = { { V(100), V(20) }, { V(7), V(78) } };
 ///
 /// If you have a my_post_update() function to run after values have been updated,
 /// and a my_range() function to set custom Option's min-max values, then you just
 /// remove the 'const' qualifiers and write somewhere below in the file:
 ///
-///   TUNE(SetRange(my_range), myScore, myValue, my_post_update);
+///   TUNE(SetRange(my_range), myValue, my_post_update);
 ///
 /// You can also set the range directly, and restore the default at the end
 ///
-///   TUNE(SetRange(-100, 100), myScore, SetDefaultRange);
+///   TUNE(SetRange(-100, 100), myValue, SetDefaultRange);
 ///
 /// In case update function is slow and you have many parameters, you can add:
 ///
@@ -98,7 +97,6 @@ class Tune {
 
     static_assert(   std::is_same<T,   int>::value
                   || std::is_same<T, Value>::value
-                  || std::is_same<T, Score>::value
                   || std::is_same<T, PostUpdate>::value, "Parameter type not supported!");
 
     Entry(const std::string& n, T& v, const SetRange& r) : name(n), value(v), range(r) {}

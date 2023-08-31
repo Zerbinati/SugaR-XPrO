@@ -1,12 +1,12 @@
-# SugaR, a UCI chess playing engine derived from Stockfish
+# Stockfish, a UCI chess playing engine derived from Glaurung 2.1
 # Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 #
-# SugaR is free software: you can redistribute it and/or modify
+# Stockfish is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# SugaR is distributed in the hope that it will be useful,
+# Stockfish is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-	EXE = sugar.exe
+	EXE = stockfish.exe
 else
-	EXE = sugar
+	EXE = stockfish
 endif
 
 ### Installation dir definitions
@@ -49,22 +49,17 @@ PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-ifeq ($(SDE_PATH),)
-	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
-else
-	PGOBENCH = $(SDE_PATH) -future -- $(WINE_PATH) ./$(EXE) bench
-endif
+PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
-SRCS = benchmark.cpp bitboard.cpp evaluate.cpp experience.cpp main.cpp \
-	misc.cpp movegen.cpp movepick.cpp position.cpp psqt.cpp \
+SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
+	misc.cpp movegen.cpp movepick.cpp position.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp \
-	book/book.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp
+	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
+VPATH = syzygy:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -109,7 +104,7 @@ VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
 ### 2.1. General and architecture defaults
 
 ifeq ($(ARCH),)
-   ARCH = x86-64-modern
+   ARCH = x86-64-avx2
    help_skip_sanity = yes
 endif
 # explicitly check for the list of supported architectures (as listed with make help),
@@ -194,6 +189,8 @@ ifeq ($(findstring -sse41,$(ARCH)),-sse41)
 endif
 
 ifeq ($(findstring -modern,$(ARCH)),-modern)
+        $(warning *** ARCH=$(ARCH) is deprecated, defaulting to ARCH=x86-64-sse41-popcnt. Execute `make help` for a list of available architectures. ***)
+        $(shell sleep 5)
 	popcnt = yes
 	sse = yes
 	sse2 = yes
@@ -368,7 +365,7 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
-CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 -DNNUE_EMBEDDING_OFF $(EXTRACXXFLAGS)
+CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
@@ -763,7 +760,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile sugar, type: "
+	@echo "To compile stockfish, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -786,7 +783,7 @@ help:
 	@echo "x86-64-bmi2             > x86 64-bit with bmi2 support"
 	@echo "x86-64-avx2             > x86 64-bit with avx2 support"
 	@echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support"
-	@echo "x86-64-modern           > common modern CPU, currently x86-64-sse41-popcnt"
+	@echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt"
 	@echo "x86-64-ssse3            > x86 64-bit with ssse3 support"
 	@echo "x86-64-sse3-popcnt      > x86 64-bit with sse3 and popcnt support"
 	@echo "x86-64                  > x86 64-bit generic (with sse2 support)"
@@ -816,13 +813,13 @@ help:
 	@echo "Simple examples. If you don't know what to do, you likely want to run one of: "
 	@echo ""
 	@echo "make -j profile-build ARCH=x86-64-avx2    # typically a fast compile for common systems "
-	@echo "make -j profile-build ARCH=x86-64-modern  # A more portable compile for 64-bit systems "
+	@echo "make -j profile-build ARCH=x86-64-sse41-popcnt  # A more portable compile for 64-bit systems "
 	@echo "make -j profile-build ARCH=x86-64         # A portable compile for 64-bit systems "
 	@echo ""
 	@echo "Advanced examples, for experienced users: "
 	@echo ""
-	@echo "make -j profile-build ARCH=x86-64-bmi2"
-	@echo "make -j profile-build ARCH=x86-64-bmi2 COMP=gcc COMPCXX=g++-9.0"
+	@echo "make -j profile-build ARCH=x86-64-avxvnni"
+	@echo "make -j profile-build ARCH=x86-64-avxvnni COMP=gcc COMPCXX=g++-12.0"
 	@echo "make -j build ARCH=x86-64-ssse3 COMP=clang"
 	@echo ""
 	@echo "-------------------------------"
@@ -850,7 +847,8 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH) 2>&1
+	$(PGOBENCH) > PGOBENCH.out 2>&1
+	tail -n 4 PGOBENCH.out
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
@@ -873,16 +871,16 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f sugar sugar.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o
+	@rm -f stockfish stockfish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda *.s 
-	@rm -f sugar.profdata *.profraw
-	@rm -f sugar.*args*
-	@rm -f sugar.*lt*
-	@rm -f sugar.res
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s PGOBENCH.out
+	@rm -f stockfish.profdata *.profraw
+	@rm -f stockfish.*args*
+	@rm -f stockfish.*lt*
+	@rm -f stockfish.res
 	@rm -f ./-lstdc++.res
 
 # set up shell variables for the net stuff
@@ -897,33 +895,33 @@ netvariables:
 net: netvariables
 	@echo "Default net: $(nnuenet)"
 	@if [ "x$(curl_or_wget)" = "x" ]; then \
-	    echo "Neither curl nor wget is installed. Install one of these tools unless the net has been downloaded manually"; \
+		echo "Neither curl nor wget is installed. Install one of these tools unless the net has been downloaded manually"; \
 	fi
 	@if [ "x$(shasum_command)" = "x" ]; then \
-        echo "shasum / sha256sum not found, skipping net validation"; \
-    elif test -f "$(nnuenet)"; then \
-	    if [ "$(nnuenet)" != "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
-	        echo "Removing invalid network"; rm -f $(nnuenet); \
-	    fi; \
+		echo "shasum / sha256sum not found, skipping net validation"; \
+	elif test -f "$(nnuenet)"; then \
+		if [ "$(nnuenet)" != "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
+			echo "Removing invalid network"; rm -f $(nnuenet); \
+		fi; \
 	fi;
 	@for nnuedownloadurl in "$(nnuedownloadurl1)" "$(nnuedownloadurl2)"; do \
 		if test -f "$(nnuenet)"; then \
-	    	echo "$(nnuenet) available : OK"; break; \
+			echo "$(nnuenet) available : OK"; break; \
 		else \
-	    	if [ "x$(curl_or_wget)" != "x" ]; then \
+			if [ "x$(curl_or_wget)" != "x" ]; then \
 				echo "Downloading $${nnuedownloadurl}"; $(curl_or_wget) $${nnuedownloadurl} > $(nnuenet);\
 			else \
 				echo "No net found and download not possible"; exit 1;\
-	    	fi; \
+			fi; \
 		fi; \
 		if [ "x$(shasum_command)" != "x" ]; then \
-	    	if [ "$(nnuenet)" != "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
+			if [ "$(nnuenet)" != "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
 				echo "Removing failed download"; rm -f $(nnuenet); \
-	    	fi; \
+			fi; \
 		fi; \
 	done
 	@if ! test -f "$(nnuenet)"; then \
-	    echo "Failed to download $(nnuenet)."; \
+		echo "Failed to download $(nnuenet)."; \
 	fi;
 	@if [ "x$(shasum_command)" != "x" ]; then \
 		if [ "$(nnuenet)" = "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
@@ -1013,9 +1011,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=sugar.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=sugar.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 

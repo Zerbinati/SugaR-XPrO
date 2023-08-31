@@ -1,13 +1,13 @@
 /*
-  SugaR, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
-  SugaR is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  SugaR is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -27,8 +27,6 @@
 #endif
 
 #include <windows.h>
-#include "VersionHelpers.h"
-
 // The needed Windows API for processor groups could be missed from old Windows
 // versions, so instead of calling them directly (forcing the linker to resolve
 // the calls at compile time), try to load them at runtime. To do this we need
@@ -49,26 +47,11 @@ using fun8_t = bool(*)(HANDLE, BOOL, PTOKEN_PRIVILEGES, DWORD, PTOKEN_PRIVILEGES
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string_view>
 #include <vector>
-#include <stdarg.h>
-#include <bitset>
-#include <cstdlib>
-#include <regex>
-
-#ifdef __GNUC__
-#include <sys/stat.h> //for stat()
-#endif
-
-#ifdef _MSC_VER
-#else
-#include <sys/types.h>
-#include <dirent.h>
-#endif
 
 #if defined(__linux__) && !defined(__ANDROID__)
 #include <stdlib.h>
@@ -89,11 +72,8 @@ namespace Stockfish {
 
 namespace {
 
-/// Version number. If Version is left empty, then compile date in the format
-/// DD-MM-YY and show in engine_info.
-const string Version = "";
-
-bool LPMessage = false;
+/// Version number or dev.
+constexpr string_view version = "dev";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -161,32 +141,46 @@ public:
 
 } // namespace
 
-/// engine_info() returns the full name of the current SugaR version. This
-/// will be either "SugaR <Tag> DD-MM-YY" (where DD-MM-YY is the date when
-/// the program was compiled) or "SugaR <Version>", depending on whether
-/// Version is empty.
+
+/// engine_info() returns the full name of the current Stockfish version.
+/// For local dev compiles we try to append the commit sha and commit date
+/// from git if that fails only the local compilation date is set and "nogit" is specified:
+/// Stockfish dev-YYYYMMDD-SHA
+/// or
+/// Stockfish dev-YYYYMMDD-nogit
+///
+/// For releases (non dev builds) we only include the version number:
+/// Stockfish version
 
 string engine_info(bool to_uci) {
+  stringstream ss;
+  ss << "Stockfish " << version << setfill('0');
 
-  const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
-  string month, day, year;
-  stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
-
-  ss << "SugaR XPrO " << Version << setfill('0');
-
-  if (Version.empty())
+  if constexpr (version == "dev")
   {
+      ss << "-";
+      #ifdef GIT_DATE
+      ss << stringify(GIT_DATE);
+      #else
+      constexpr string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+      string month, day, year;
+      stringstream date(__DATE__); // From compiler, format is "Sep 21 2008"
+
       date >> month >> day >> year;
-      ss << setw(2) << day << setw(2) << (1 + months.find(month) / 4) << year.substr(2);
+      ss << year << setw(2) << setfill('0') << (1 + months.find(month) / 4) << setw(2) << setfill('0') << day;
+      #endif
+
+      ss << "-";
+
+      #ifdef GIT_SHA
+      ss << stringify(GIT_SHA);
+      #else
+      ss << "nogit";
+      #endif
   }
 
   ss << (to_uci  ? "\nid author ": " by ")
-     << "M.Z, Stockfish developers (see AUTHORS file)";
-
-      ss << "\n"
-         << compiler_info()
-         << "\nBuild date/time       : " << year << '-' << setw(2) << setfill('0') << month << '-' << setw(2) << setfill('0') << day << ' ' << __TIME__
-         << "\n";
+     << "the Stockfish developers (see AUTHORS file)";
 
   return ss.str();
 }
@@ -206,7 +200,7 @@ std::string compiler_info() {
 /// _WIN32             Building on Windows (any)
 /// _WIN64             Building on Windows 64 bit
 
-  std::string compiler = "\nCompiled by           : ";
+  std::string compiler = "\nCompiled by ";
 
   #ifdef __clang__
      compiler += "clang++ ";
@@ -261,7 +255,7 @@ std::string compiler_info() {
      compiler += " on unknown system";
   #endif
 
-  compiler += "\nCompile settings      :";
+  compiler += "\nCompilation settings include: ";
   compiler += (Is64Bit ? " 64bit" : " 32bit");
   #if defined(USE_VNNI)
     compiler += " VNNI";
@@ -307,680 +301,6 @@ std::string compiler_info() {
   return compiler;
 }
 
-string format_bytes(uint64_t bytes, int decimals)
-{
-    static const uint64_t _1KB = 1024;
-    static const uint64_t _1MB = _1KB * 1024;
-    static const uint64_t _1GB = _1MB * 1024;
-
-    std::stringstream ss;
-
-    if (bytes < _1KB)
-        ss << bytes << " B";
-    else if (bytes < _1MB)
-        ss << std::fixed << std::setprecision(decimals) << ((double)bytes / _1KB) << "KB";
-    else if (bytes < _1GB)
-        ss << std::fixed << std::setprecision(decimals) << ((double)bytes / _1MB) << "MB";
-    else
-        ss << std::fixed << std::setprecision(decimals) << ((double)bytes / _1GB) << "GB";
-
-    return ss.str();
-}
-
-void show_logo()
-{
-#if defined(_WIN32)
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
-    if (hConsole && !GetConsoleScreenBufferInfo(hConsole, &csbiInfo))
-        hConsole = nullptr;
-
-    if (hConsole)
-        SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_INTENSITY);
-#elif defined(__linux)
-    cout << "\033[1;31m";
-#endif
-
-    cout <<
-        R"(
-  _           _  
- /_`   _  _  /_/ 
- _//_//_//_|/ \_
-      __/
-
-)" << endl;
-
-#if defined(_WIN32)
-    if (hConsole)
-        SetConsoleTextAttribute(hConsole, csbiInfo.wAttributes);
-#elif defined(__linux)
-    cout << "\033[0m";
-#endif
-}
-
-namespace SysInfo
-{
-    namespace
-    {
-        uint32_t numaNodeCount = 0;
-        uint32_t processorCoreCount = 0;
-        uint32_t logicalProcessorCount = 0;
-        uint32_t processorCacheSize[3] = { 0, 0, 0 };
-
-        uint64_t totalMemory = 0;
-
-        std::string osInfo;
-        std::string cpuBrand;
-
-        void init_hw_info()
-        {
-#if defined(_WIN32)
-            typedef BOOL(WINAPI* GLPIEX)(LOGICAL_PROCESSOR_RELATIONSHIP, PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, PDWORD);
-            static GLPIEX impGetLogicalProcessorInformationEx = (GLPIEX)(void (*)(void))GetProcAddress(GetModuleHandle("kernel32.dll"), "GetLogicalProcessorInformationEx");
-
-            void* oldBuffer = nullptr;
-            DWORD len = 0;
-            DWORD offset = 0;
-
-            SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* bufferEx = nullptr;
-            SYSTEM_LOGICAL_PROCESSOR_INFORMATION* buffer = nullptr;
-            GROUP_AFFINITY* nodeGroupMask = nullptr;
-            ULONGLONG* nodeMask = nullptr;
-
-            auto release_memory = [&]()
-            {
-                if (bufferEx) { free(bufferEx);      bufferEx = nullptr; }
-                if (buffer) { free(buffer);        buffer = nullptr; }
-                if (oldBuffer) { free(oldBuffer);     oldBuffer = nullptr; }
-                if (nodeGroupMask) { free(nodeGroupMask); nodeGroupMask = nullptr; }
-                if (nodeMask) { free(nodeMask);      nodeMask = nullptr; }
-            };
-
-            // Use windows processor groups?
-            if (impGetLogicalProcessorInformationEx)
-            {
-                // Get array of node and core data
-                while (true)
-                {
-                    if (impGetLogicalProcessorInformationEx(RelationAll, bufferEx, &len))
-                        break;
-
-                    //Save old buffer in case realloc fails
-                    oldBuffer = bufferEx;
-
-                    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-                        bufferEx = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)realloc(bufferEx, len);
-                    else
-                        bufferEx = nullptr; //Old value already stored in 'oldBuffer'
-
-                    if (!bufferEx)
-                    {
-                        release_memory();
-                        return;
-                    }
-                }
-
-                //Prepare
-                size_t maxNodes = 16;
-
-                //Allocate memory
-                nodeGroupMask = (GROUP_AFFINITY*)malloc(maxNodes * sizeof(GROUP_AFFINITY));
-                if (!nodeGroupMask)
-                {
-                    release_memory();
-                    return;
-                }
-
-                //Numa nodes loop
-                SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* ptr = bufferEx;
-                while (offset < len && offset + ptr->Size <= len)
-                {
-                    if (ptr->Relationship == RelationNumaNode)
-                    {
-                        if (numaNodeCount == maxNodes)
-                        {
-                            maxNodes += 16;
-
-                            oldBuffer = nodeGroupMask;
-                            nodeGroupMask = (GROUP_AFFINITY*)realloc(nodeGroupMask, maxNodes * sizeof(GROUP_AFFINITY));
-                            if (!nodeGroupMask)
-                            {
-                                release_memory();
-                                return;
-                            }
-                        }
-
-                        nodeGroupMask[numaNodeCount] = ptr->NumaNode.GroupMask;
-                        numaNodeCount++;
-                    }
-
-                    offset += ptr->Size;
-                    ptr = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)(((char*)ptr) + ptr->Size);
-                }
-
-                //Physical/Logical cores loop and cache
-                ptr = bufferEx;
-                offset = 0;
-                while (offset < len && offset + ptr->Size <= len)
-                {
-                    if (ptr->Relationship == RelationProcessorCore)
-                    {
-                        // Loop through nodes to find one with matching group number and intersecting mask
-                        for (size_t i = 0; i < numaNodeCount; i++)
-                        {
-                            if (nodeGroupMask[i].Group == ptr->Processor.GroupMask[0].Group && (nodeGroupMask[i].Mask & ptr->Processor.GroupMask[0].Mask))
-                            {
-                                ++processorCoreCount;
-                                logicalProcessorCount += ptr->Processor.Flags == LTP_PC_SMT ? 2 : 1;
-                            }
-                        }
-                    }
-                    else if (ptr->Relationship == RelationCache)
-                    {
-                        switch (ptr->Cache.Level)
-                        {
-                        case 1:
-                        case 2:
-                        case 3:
-                            processorCacheSize[ptr->Cache.Level - 1] += ptr->Cache.CacheSize;
-                            break;
-
-                        default:
-                            assert(false);
-                            break;
-                        }
-                    }
-
-                    offset += ptr->Size;
-                    ptr = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)(((char*)ptr) + ptr->Size);
-                }
-            }
-            else // Use windows but not its processor groups
-            {
-                while (true)
-                {
-                    if (GetLogicalProcessorInformation(buffer, &len))
-                        break;
-
-                    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-                    {
-                        //Save old buffer in case realloc fails
-                        oldBuffer = buffer;
-
-                        buffer = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION*)realloc(buffer, len);
-                    }
-                    else
-                    {
-                        buffer = nullptr; //Old value already stored in 'oldBuffer'
-                    }
-
-                    if (!buffer)
-                    {
-                        release_memory();
-                        return;
-                    }
-                }
-
-                //Prepare
-                size_t maxNodes = 16;
-
-                //Allocate memory
-                nodeMask = (ULONGLONG*)malloc(maxNodes * sizeof(ULONGLONG));
-                if (!nodeMask)
-                {
-                    release_memory();
-                    return;
-                }
-
-                //Numa nodes loop
-                SYSTEM_LOGICAL_PROCESSOR_INFORMATION* ptr = buffer;
-                while (offset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= len)
-                {
-                    if (ptr->Relationship == RelationNumaNode)
-                    {
-                        if (numaNodeCount == maxNodes)
-                        {
-                            maxNodes += 16;
-
-                            oldBuffer = nodeMask;
-                            nodeMask = (ULONGLONG*)realloc(nodeMask, maxNodes * sizeof(ULONGLONG));
-                            if (!nodeMask)
-                            {
-                                release_memory();
-                                return;
-                            }
-                        }
-
-                        nodeMask[numaNodeCount] = ptr->ProcessorMask;
-                        numaNodeCount++;
-                    }
-
-                    offset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
-                    ptr++;
-                }
-
-                //Physical/Logical cores and cache loop
-                ptr = buffer;
-                offset = 0;
-                while (offset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= len)
-                {
-                    if (ptr->Relationship == RelationProcessorCore)
-                    {
-                        // Loop through nodes to find one with intersecting mask
-                        for (size_t i = 0; i < numaNodeCount; i++)
-                        {
-                            if (nodeMask[i] & ptr->ProcessorMask)
-                            {
-                                ++processorCoreCount;
-                                logicalProcessorCount += ptr->ProcessorCore.Flags == 1 ? 2 : 1;
-                            }
-                        }
-                    }
-                    else if (ptr->Relationship == RelationCache)
-                    {
-                        switch (ptr->Cache.Level)
-                        {
-                        case 1:
-                        case 2:
-                        case 3:
-                            processorCacheSize[ptr->Cache.Level - 1] += ptr->Cache.Size;
-                            break;
-
-                        default:
-                            assert(false);
-                            break;
-                        }
-                    }
-
-                    offset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
-                    ptr++;
-                }
-            }
-
-            release_memory();
-#elif defined(__linux__)
-            const int max_buffer = 1024;
-            char buffer[max_buffer];
-
-            //Run 'lscpu' to get CPU information
-            FILE* stream = popen("lscpu 2>&1", "r");
-            if (!stream)
-                return;
-
-            string cpuData;
-            while (!feof(stream))
-            {
-                if (fgets(buffer, max_buffer, stream) != NULL)
-                    cpuData.append(buffer);
-            }
-
-            pclose(stream);
-
-            if (cpuData.empty())
-                return;
-
-            auto parse_unit = [](const char *s)
-            {
-                if (strcasecmp(s, "KB") == 0 || strcasecmp(s, "KiB") == 0)
-                    return 1024;
-
-                if (strcasecmp(s, "MB") == 0 || strcasecmp(s, "MiB") == 0)
-                    return 1024 * 1024;
-
-                if (strcasecmp(s, "GB") == 0 || strcasecmp(s, "GiB") == 0)
-                    return 1024 * 1024 * 1024;
-
-                return 0;
-            };
-
-            //Find required data
-            static regex rgxNumberOfCpus("^CPU\\(s\\):\\s*(\\d*)$");
-            static regex rgxThreadsPerCode("^Thread\\(s\\) per core:\\s*(\\d*)$");
-            static regex rgxNumaNodes("NUMA node\\(s\\):\\s*(\\d*)$");
-            static regex rgxL1dCache("^L1d cache:\\s*(\\d*) (.*)$");
-            static regex rgxL1iCache("^L1i cache:\\s*(\\d*) (.*)$");
-            static regex rgxL2Cache("^L2 cache:\\s*(\\d*) (.*)$");
-            static regex rgxL3Cache("^L3 cache:\\s*(\\d*) (.*)$");
-            static regex rgxCpuBrand("^Model name:\\s*(.*)$");
-
-            int tempThreadsPerCode = 0;
-
-            std::stringstream ss(cpuData);
-            std::string line;
-            while (std::getline(ss, line))
-            {
-                smatch match;
-                if (regex_search(line, match, rgxNumberOfCpus))
-                {
-                    processorCoreCount = (uint32_t)atoi(match[1].str().c_str());
-                }
-                else if(regex_search(line, match, rgxThreadsPerCode))
-                {
-                    tempThreadsPerCode = atoi(match[1].str().c_str());
-                }
-                else if (regex_search(line, match, rgxL1dCache) || regex_search(line, match, rgxL1iCache))
-                {
-                    processorCacheSize[0] += (uint32_t)atoi(match[1].str().c_str()) * parse_unit(match[2].str().c_str());
-                }
-                else if (regex_search(line, match, rgxL2Cache))
-                {
-                    processorCacheSize[1] += (uint32_t)atoi(match[1].str().c_str()) * parse_unit(match[2].str().c_str());
-                }
-                else if (regex_search(line, match, rgxL3Cache))
-                {
-                    processorCacheSize[2] += (uint32_t)atoi(match[1].str().c_str()) * parse_unit(match[2].str().c_str());
-                }
-                else if (regex_search(line, match, rgxNumaNodes))
-                {
-                    numaNodeCount = (uint32_t)atoi(match[1].str().c_str());
-                }
-                else if (regex_search(line, match, rgxCpuBrand))
-                {
-                    cpuBrand = match[1].str();
-                }
-            }
-
-            if (processorCoreCount)
-            {
-                if (tempThreadsPerCode)
-                    logicalProcessorCount = processorCoreCount * tempThreadsPerCode;
-                else
-                    logicalProcessorCount = processorCoreCount;
-            }
-#endif
-        }
-
-        void init_processor_brand()
-        {
-#if defined(_WIN32)
-            HKEY hKey = HKEY_LOCAL_MACHINE;
-            TCHAR Data[1024];
-
-            //Clear buffer
-            ZeroMemory(Data, sizeof(Data));
-
-            //Open target registry key
-            DWORD buffersize = sizeof(Data) / sizeof(Data[0]);
-            LONG result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("Hardware\\Description\\System\\CentralProcessor\\0\\"), 0, KEY_READ, &hKey);
-            if (result == ERROR_SUCCESS)
-            {
-                //Get value of 'Key = ProcessorNameString' which is the processor name
-                result = RegQueryValueEx(hKey, TEXT("ProcessorNameString"), NULL, NULL, (LPBYTE)&Data, &buffersize);
-
-                //If we failed to retrieve the processor name, then we retrun "N/A"
-                if (result == ERROR_SUCCESS)
-                {
-                    cpuBrand = Data;
-                }
-
-                // Close the Registry Key
-                RegCloseKey(hKey);
-            }
-#elif defined(__linux__)
-            //Nothing to do here since CPU brand is read when init_hw_info() is called
-#endif
-        }
-
-        void init_os_info()
-        {
-#if defined(_WIN32)
-            {
-                InitVersion();
-
-                if (IsWindowsXPOrGreater())
-                {
-                    if (IsWindowsXPSP1OrGreater())
-                    {
-                        if (IsWindowsXPSP2OrGreater())
-                        {
-                            if (IsWindowsXPSP3OrGreater())
-                            {
-                                if (IsWindowsVistaOrGreater())
-                                {
-                                    if (IsWindowsVistaSP1OrGreater())
-                                    {
-                                        if (IsWindowsVistaSP2OrGreater())
-                                        {
-                                            if (IsWindows7OrGreater())
-                                            {
-                                                if (IsWindows7SP1OrGreater())
-                                                {
-                                                    if (IsWindows8OrGreater())
-                                                    {
-                                                        if (IsWindows8Point1OrGreater())
-                                                        {
-                                                            if (IsWindows10OrGreater())
-                                                            {
-                                                                osInfo = "Windows 10";
-                                                            }
-                                                            else
-                                                            {
-                                                                osInfo = "Windows 8.1";
-                                                            }
-                                                        }
-                                                        else
-                                                        {
-                                                            osInfo = "Windows 8";
-                                                        }
-                                                    }
-                                                    else
-                                                    {
-                                                        osInfo = "Windows 7 SP1";
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    osInfo = "Windows 7";
-                                                }
-                                            }
-                                            else
-                                            {
-                                                osInfo = "Vista SP2";
-                                            }
-                                        }
-                                        else
-                                        {
-                                            osInfo = "Vista SP1";
-                                        }
-                                    }
-                                    else
-                                    {
-                                        osInfo = "Vista";
-                                    }
-                                }
-                                else
-                                {
-                                    osInfo = "XP SP3";
-                                }
-                            }
-                            else
-                            {
-                                osInfo = "XP SP2";
-                            }
-                        }
-                        else
-                        {
-                            osInfo = "XP SP1";
-                        }
-                    }
-                    else
-                    {
-                        osInfo = "XP";
-                    }
-                }
-
-                if (IsWindowsServer())
-                {
-                    osInfo += " Server";
-                }
-                else
-                {
-                    osInfo += " Client";
-                }
-
-                osInfo += " Or Greater";
-            }
-#elif defined(__linux__)
-            ifstream distribInfp("/etc/lsb-release");
-            if (!distribInfp.is_open())
-                return;
-
-            static regex rgxDistributionID("^DISTRIB_ID=(.*)$");
-            static regex rgxDistribRelease("^DISTRIB_RELEASE=(.*)$");
-            static regex rgxDistribDescription("^DISTRIB_DESCRIPTION=\"(.*)\"$");
-
-            std::string distribID;
-            std::string distribRelease;
-            std::string distribDescription;
-
-            std::string line;
-            while (std::getline(distribInfp, line))
-            {
-                smatch match;
-                if (regex_search(line, match, rgxDistributionID))
-                {
-                    distribID = match[1].str();
-                }
-                else if (regex_search(line, match, rgxDistribRelease))
-                {
-                    distribRelease = match[1].str();
-                }
-                else if (regex_search(line, match, rgxDistribDescription))
-                {
-                    distribDescription = match[1].str();
-
-                    //If we have the distrib description then we are good to go
-                    break;
-                }
-            }
-
-            if (!distribDescription.empty())
-                osInfo = distribDescription;
-            else if (!distribID.empty() && !distribRelease.empty())
-                osInfo = distribID + " " + distribRelease;
-#endif
-        }
-
-        void init_mem_info()
-        {
-#if defined(_WIN32)
-            ULONGLONG totMem;
-            if (GetPhysicallyInstalledSystemMemory(&totMem))
-            {
-                //Returned value is in KB
-                totalMemory = totMem * 1024;
-            }
-            else
-            {
-                MEMORYSTATUSEX statex;
-                statex.dwLength = sizeof(statex);
-
-                if (GlobalMemoryStatusEx(&statex))
-                    totalMemory = statex.ullTotalPhys;
-                else
-                    totalMemory = 0;
-            }
-#elif defined(__linux__)
-            ifstream memInfo("/proc/meminfo");
-            if (!memInfo.is_open())
-                return;
-
-            static regex rgxMemTotal("^MemTotal:\\s*(\\d*) (.*)$$");
-
-            std::string line;
-            while (std::getline(memInfo, line))
-            {
-                smatch match;
-                if (regex_search(line, match, rgxMemTotal))
-                {
-                    totalMemory = strtoull(match[1].str().c_str(), nullptr, 10);
-                    if (strcasecmp(match[2].str().c_str(), "KB") == 0 || strcasecmp(match[2].str().c_str(), "KiB") == 0)
-                        totalMemory *= 1024;
-                    else if (strcasecmp(match[2].str().c_str(), "MB") == 0 || strcasecmp(match[2].str().c_str(), "MiB") == 0)
-                        totalMemory *= 1024 * 1024;
-                    else if (strcasecmp(match[2].str().c_str(), "GB") == 0 || strcasecmp(match[2].str().c_str(), "GiB") == 0)
-                        totalMemory *= 1024 * 1024 * 1024;
-
-                    //We found what we are looking for
-                    break;
-                }
-            }
-#endif
-        }
-    }
-
-    void init()
-    {
-        init_hw_info();
-        init_processor_brand();
-        init_os_info();
-        init_mem_info();
-    }
-
-    const string numa_nodes()
-    {
-        if (!numaNodeCount)
-            return "N/A";
-
-        return to_string(numaNodeCount);
-    }
-
-    const string physical_cores()
-    {
-        if (!processorCoreCount)
-            return "N/A";
-
-        return to_string(processorCoreCount);
-    }
-
-    const string logical_cores()
-    {
-        if (!logicalProcessorCount)
-            return "N/A";
-
-        return to_string(logicalProcessorCount);
-    }
-
-    const string is_hyper_threading()
-    {
-        if (!logicalProcessorCount || !processorCoreCount)
-            return "N/A";
-
-        return processorCoreCount == logicalProcessorCount ? "No" : "Yes";
-    }
-
-    const string cache_info(int idx)
-    {
-        if (!processorCacheSize[idx])
-            return "N/A";
-
-        return format_bytes(processorCacheSize[idx], 0);
-    }
-
-    const string os_info()
-    {
-        if (osInfo.empty())
-            return "N/A";
-
-        return osInfo;
-    }
-
-    const string processor_brand()
-    {
-        if (cpuBrand.empty())
-            return "N/A";
-
-        return cpuBrand;
-    }
-
-    const string total_memory()
-    {
-        if (totalMemory == 0)
-            return "N/A";
-
-        return format_bytes(totalMemory, 0);
-    }
-}
 
 /// Debug functions used mainly to collect run-time statistics
 constexpr int MaxDebugSlots = 32;
@@ -1055,7 +375,7 @@ void dbg_print() {
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = stdev[i][0]))
         {
-            double r = sqrtl(E(stdev[i][2]) - sqr(E(stdev[i][1])));
+            double r = sqrt(E(stdev[i][2]) - sqr(E(stdev[i][1])));
             std::cerr << "Stdev #" << i
                       << ": Total " << n << " Stdev " << r
                       << std::endl;
@@ -1065,8 +385,8 @@ void dbg_print() {
         if ((n = correl[i][0]))
         {
             double r = (E(correl[i][5]) - E(correl[i][1]) * E(correl[i][3]))
-                       / (  sqrtl(E(correl[i][2]) - sqr(E(correl[i][1])))
-                          * sqrtl(E(correl[i][4]) - sqr(E(correl[i][3]))));
+                       / (  sqrt(E(correl[i][2]) - sqr(E(correl[i][1])))
+                          * sqrt(E(correl[i][4]) - sqr(E(correl[i][3]))));
             std::cerr << "Correl. #" << i
                       << ": Total " << n << " Coefficient " << r
                       << std::endl;
@@ -1235,23 +555,8 @@ void* aligned_large_pages_alloc(size_t allocSize) {
 
   // Fall back to regular, page aligned, allocation if necessary
   if (!mem)
-     {
       mem = VirtualAlloc(nullptr, allocSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 
-	    if (LPMessage == false)
-		    {
-		    cout << "Large Memory Pages    : not available" << endl << endl;
-		    LPMessage = true;
-            }
-        }
-  else
-        {
-	    if (LPMessage == false)
-		    {
-		    cout << "Large Memory Pages    : available" << endl << endl;
-		    LPMessage = true;
-            }
-	    }
   return mem;
 }
 
@@ -1406,10 +711,7 @@ void bindThisThread(size_t idx) {
   {
       GROUP_AFFINITY affinity;
       if (fun2(node, &affinity))                                                 // GetNumaNodeProcessorMaskEx
-      {
           fun3(GetCurrentThread(), &affinity, nullptr);                          // SetThreadGroupAffinity
-          sync_cout << "info string Binding thread " << idx << " to node " << node << sync_endl;
-      }
   }
   else
   {
@@ -1479,189 +781,9 @@ void init([[maybe_unused]] int argc, char* argv[]) {
     // pattern replacement: "./" at the start of path is replaced by the working directory
     if (binaryDirectory.find("." + pathSeparator) == 0)
         binaryDirectory.replace(0, 1, workingDirectory);
-
-    binaryDirectory = Utility::fix_path(binaryDirectory);
-    workingDirectory = Utility::fix_path(workingDirectory);
-
 }
 
 
 } // namespace CommandLine
-
-namespace Utility
-{
-    string myFolder;
-
-    void init(const char* arg0)
-    {
-        string s = arg0;
-        size_t i = s.find_last_of(DirectorySeparator);
-        if (i != string::npos)
-            myFolder = s.substr(0, i);
-    }
-
-    bool file_exists(const string& filename)
-    {
-        struct stat info;
-        if (stat(filename.c_str(), &info) == 0)
-            return (info.st_mode & S_IFREG) == S_IFREG;
-
-        return false;
-    }
-
-    bool is_game_decided(const Position& pos, Value lastScore)
-    {
-        //Assume game is decided if game ply is above 200
-        if (pos.game_ply() > 200)
-            return true;
-
-        //Assume game is decided if |last score| is above 2.5 Pawn
-        if (lastScore != VALUE_NONE && std::abs(lastScore) > PawnValueEg * 5 / 2)
-            return true;
-
-        //Assume game is decided if |last score| is below 0.25 Pawn and game ply is above 120
-        if (pos.game_ply() > 120 && lastScore < PawnValueEg / 4)
-            return true;
-
-        //Assume game is decided if remaining pieces is less than 9
-        if (pos.count<ALL_PIECES>() < 9)
-            return true;
-
-        //Assume game is not decided!
-        return false;
-    }
-
-    string unquote(const string& s)
-    {
-        string s1 = s;
-
-        if (s1.size() > 2)
-        {
-            if ((s1.front() == '\"' && s1.back() == '\"') || (s1.front() == '\'' && s1.back() == '\''))
-            {
-                s1 = s1.substr(1, s1.size() - 2);
-            }
-        }
-
-        return s1;
-    }
-
-    bool is_empty_filename(const string &fn)
-    {
-        if (fn.empty())
-            return true;
-
-        static string Empty = EMPTY;
-        return equal(
-            fn.begin(), fn.end(),
-            Empty.begin(), Empty.end(),
-            [](char a, char b) { return tolower(a) == tolower(b); });
-    }
-
-    string fix_path(const string& p)
-    {
-        if (is_empty_filename(p))
-            return p;
-
-        string p1 = unquote(p);
-        replace(p1.begin(), p1.end(), ReverseDirectorySeparator, DirectorySeparator);
-
-        return p1;
-    }
-
-    string combine_path(const string& p1, const string& p2)
-    {
-        //We don't expect the first part of the path to be empty!
-        assert(is_empty_filename(p1) == false);
-
-        if (is_empty_filename(p2))
-            return p2;
-
-        string p;
-        if (p1.back() == DirectorySeparator || p1.back() == ReverseDirectorySeparator)
-            p = p1 + p2;
-        else
-            p = p1 + DirectorySeparator + p2;
-
-        return fix_path(p);
-    }
-
-    string map_path(const string& p)
-    {
-        if (is_empty_filename(p))
-            return p;
-
-        string p2 = fix_path(p);
-
-        //Make sure we can map this path
-        if (p2.find(DirectorySeparator) == string::npos)
-            p2 = combine_path(CommandLine::binaryDirectory, p);
-
-        return p2;
-    }
-
-    size_t get_file_size(const string& f)
-    {
-        if(is_empty_filename(f))
-            return (size_t)-1;
-
-        ifstream in(map_path(f), ifstream::ate | ifstream::binary);
-        if (!in.is_open())
-            return (size_t)-1;
-
-        return (size_t)in.tellg();
-    }
-
-    bool is_same_file(const string& f1, const string& f2)
-    {
-        return map_path(f1) == map_path(f2);
-    }
-
-    string format_bytes(uint64_t bytes, int decimals)
-    {
-        static const uint64_t KB = 1024;
-        static const uint64_t MB = KB * 1024;
-        static const uint64_t GB = MB * 1024;
-        static const uint64_t TB = GB * 1024;
-
-        stringstream ss;
-
-        if (bytes < KB)
-            ss << bytes << " B";
-        else if (bytes < MB)
-            ss << fixed << setprecision(decimals) << ((double)bytes / KB) << "KB";
-        else if (bytes < GB)
-            ss << fixed << setprecision(decimals) << ((double)bytes / MB) << "MB";
-        else if (bytes < TB)
-            ss << fixed << setprecision(decimals) << ((double)bytes / GB) << "GB";
-        else
-            ss << fixed << setprecision(decimals) << ((double)bytes / TB) << "TB";
-
-        return ss.str();
-    }
-
-    //Code is an `edited` version of: https://stackoverflow.com/a/49812018
-    string format_string(const char* const fmt, ...)
-    {
-        //Initialize use of the variable arguments
-        va_list vaArgs;
-        va_start(vaArgs, fmt);
-
-        //Acquire the required string size
-        va_start(vaArgs, fmt);
-        int len = vsnprintf(nullptr, 0, fmt, vaArgs);
-        va_end(vaArgs);
-
-        
-        //Allocate enough buffer and format
-        vector<char> v(len + 1);
-        
-        va_start(vaArgs, fmt);
-        vsnprintf(v.data(), v.size(), fmt, vaArgs);
-        va_end(vaArgs);
-
-        return string(v.data(), len);
-    }
-} // namespace Utility
 
 } // namespace Stockfish

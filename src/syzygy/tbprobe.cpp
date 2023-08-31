@@ -1,13 +1,13 @@
 /*
-  SugaR, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
-  SugaR is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  SugaR is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -995,13 +995,19 @@ uint8_t* set_sizes(PairsData* d, uint8_t* data) {
     d->lowestSym = (Sym*)data;
     d->base64.resize(d->maxSymLen - d->minSymLen + 1);
 
+    // See https://en.wikipedia.org/wiki/Huffman_coding
     // The canonical code is ordered such that longer symbols (in terms of
     // the number of bits of their Huffman code) have lower numeric value,
     // so that d->lowestSym[i] >= d->lowestSym[i+1] (when read as LittleEndian).
     // Starting from this we compute a base64[] table indexed by symbol length
     // and containing 64 bit values so that d->base64[i] >= d->base64[i+1].
-    // See https://en.wikipedia.org/wiki/Huffman_coding
-    for (int i = d->base64.size() - 2; i >= 0; --i) {
+
+    // Implementation note: we first cast the unsigned size_t "base64.size()" 
+    // to a signed int "base64_size" variable and then we are able to subtract 2,
+    // avoiding unsigned overflow warnings.
+
+    int base64_size = static_cast<int>(d->base64.size());
+    for (int i = base64_size - 2; i >= 0; --i) {
         d->base64[i] = (d->base64[i + 1] + number<Sym, LittleEndian>(&d->lowestSym[i])
                                          - number<Sym, LittleEndian>(&d->lowestSym[i + 1])) / 2;
 
@@ -1012,10 +1018,10 @@ uint8_t* set_sizes(PairsData* d, uint8_t* data) {
     // than d->base64[i+1] and given the above assert condition, we ensure that
     // d->base64[i] >= d->base64[i+1]. Moreover for any symbol s64 of length i
     // and right-padded to 64 bits holds d->base64[i-1] >= s64 >= d->base64[i].
-    for (size_t i = 0; i < d->base64.size(); ++i)
+    for (int i = 0; i < base64_size; ++i)
         d->base64[i] <<= 64 - i - d->minSymLen; // Right-padding to 64 bits
 
-    data += d->base64.size() * sizeof(Sym);
+    data += base64_size * sizeof(Sym);
     d->symlen.resize(number<uint16_t, LittleEndian>(data)); data += sizeof(uint16_t);
     d->btree = (LR*)data;
 
@@ -1573,9 +1579,9 @@ bool Tablebases::root_probe(Position& pos, Search::RootMoves& rootMoves) {
         // 1 cp to cursed wins and let it grow to 49 cp as the positions gets
         // closer to a real win.
         m.tbScore =  r >= bound ? VALUE_MATE - MAX_PLY - 1
-                   : r >  0     ? Value((std::max( 3, r - (MAX_DTZ - 200)) * int(PawnValueEg)) / 200)
+                   : r >  0     ? Value((std::max( 3, r - (MAX_DTZ - 200)) * int(PawnValue)) / 200)
                    : r == 0     ? VALUE_DRAW
-                   : r > -bound ? Value((std::min(-3, r + (MAX_DTZ - 200)) * int(PawnValueEg)) / 200)
+                   : r > -bound ? Value((std::min(-3, r + (MAX_DTZ - 200)) * int(PawnValue)) / 200)
                    :             -VALUE_MATE + MAX_PLY + 1;
     }
 

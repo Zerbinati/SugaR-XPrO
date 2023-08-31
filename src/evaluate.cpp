@@ -1,13 +1,13 @@
 /*
-  SugaR, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
-  SugaR is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  SugaR is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -58,10 +58,8 @@ namespace Eval {
 
   string currentEvalFileName = "None";
 
-  int NNUE::MaterialisticEvaluationStrategy = 0;
-  int NNUE::PositionalEvaluationStrategy = 0;
-
-  /// NNUE::init() tries to load a NNUE network at startup time, or when the engine  /// receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"
+  /// NNUE::init() tries to load a NNUE network at startup time, or when the engine
+  /// receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"
   /// The name of the NNUE network is always retrieved from the EvalFile option.
   /// We search the given network in three locations: internally (the default
   /// network may be embedded in the binary), in the active working directory and
@@ -87,7 +85,6 @@ namespace Eval {
             {
                 ifstream stream(directory + eval_file, ios::binary);
                 if (NNUE::load_eval(eval_file, stream))
-				sync_cout << "info string Evaluation network loaded successfully ..." << sync_endl;
                     currentEvalFileName = eval_file;
             }
 
@@ -146,7 +143,6 @@ Value Eval::evaluate(const Position& pos) {
   assert(!pos.checkers());
 
   Value v;
-  Value psq = pos.psq_eg_stm();
 
   int nnueComplexity;
   int npm = pos.non_pawn_material() / 64;
@@ -156,8 +152,12 @@ Value Eval::evaluate(const Position& pos) {
 
   Value nnue = NNUE::evaluate(pos, true, &nnueComplexity);
 
-  // Blend optimism with nnue complexity and (semi)classical complexity
-  optimism += optimism * (nnueComplexity + abs(psq - nnue)) / 512;
+  int material =  pos.non_pawn_material(stm) - pos.non_pawn_material(~stm)
+                + 126 * (pos.count<PAWN>(stm) - pos.count<PAWN>(~stm));
+
+  // Blend optimism and eval with nnue complexity and material imbalance
+  optimism += optimism * (nnueComplexity + abs(material - nnue)) / 512;
+  nnue     -= nnue     * (nnueComplexity + abs(material - nnue)) / 32768;
 
   v = (  nnue     * (915 + npm + 9 * pos.count<PAWN>())
        + optimism * (154 + npm +     pos.count<PAWN>())) / 1024;
